@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LibraryAddCheck
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,6 +86,7 @@ fun DictionaryResults(
     onTermClick: (DictionaryTerm) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
+    onCopyText: (() -> Unit)? = null,
     onOpenDictionarySettings: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(16.dp),
 ) {
@@ -128,6 +130,7 @@ fun DictionaryResults(
                         text = query,
                         highlightRange = null,
                         onSearch = { onSearch(it) },
+                        onTrailingAction = onCopyText,
                     )
                 }
                 EmptyScreen(
@@ -145,6 +148,7 @@ fun DictionaryResults(
                 onTermClick = onTermClick,
                 onQueryChange = onQueryChange,
                 onSearch = onSearch,
+                onCopyText = onCopyText,
                 query = query,
                 highlightRange = highlightRange,
                 contentPadding = contentPadding,
@@ -190,6 +194,7 @@ private fun SearchResultsList(
     onTermClick: (DictionaryTerm) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
+    onCopyText: (() -> Unit)? = null,
     query: String,
     highlightRange: Pair<Int, Int>?,
     modifier: Modifier = Modifier,
@@ -206,6 +211,7 @@ private fun SearchResultsList(
                     text = query,
                     highlightRange = highlightRange,
                     onSearch = { onSearch(it) },
+                    onTrailingAction = onCopyText,
                 )
             }
         }
@@ -458,6 +464,7 @@ private fun WordSelector(
     text: String,
     highlightRange: Pair<Int, Int>? = null,
     onSearch: (String) -> Unit,
+    onTrailingAction: (() -> Unit)? = null,
 ) {
     // OCR text header - clickable to search from any character
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -486,27 +493,42 @@ private fun WordSelector(
         }
     }
 
-    Text(
-        text = annotatedString,
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontSize = 20.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            letterSpacing = 2.sp,
-            fontWeight = FontWeight.Normal,
-        ),
-        onTextLayout = { layout = it },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .pointerInput(text) {
-                detectTapGestures { pos ->
-                    layout?.let { layoutResult ->
-                        val offset = layoutResult.getOffsetForPosition(pos)
-                        if (offset < text.length) {
-                            onSearch(text.substring(offset))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = annotatedString,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 20.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = 2.sp,
+                fontWeight = FontWeight.Normal,
+            ),
+            onTextLayout = { layout = it },
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+                .pointerInput(text) {
+                    detectTapGestures { pos ->
+                        layout?.let { layoutResult ->
+                            val offset = layoutResult.getOffsetForPosition(pos)
+                            if (offset < text.length) {
+                                onSearch(text.substring(offset))
+                            }
                         }
                     }
-                }
-            },
-    )
+                },
+        )
+
+        if (onTrailingAction != null) {
+            IconButton(onClick = onTrailingAction) {
+                Icon(
+                    imageVector = Icons.Outlined.ContentCopy,
+                    contentDescription = stringResource(MR.strings.action_copy),
+                )
+            }
+        }
+    }
 }
