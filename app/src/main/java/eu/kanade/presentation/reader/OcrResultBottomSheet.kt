@@ -45,7 +45,7 @@ fun OcrResultBottomSheet(
             onSearch(text)
         }
     }
-
+    //t
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
