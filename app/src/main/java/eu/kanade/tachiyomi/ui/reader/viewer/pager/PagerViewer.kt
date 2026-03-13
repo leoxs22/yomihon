@@ -320,6 +320,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Moves to the next page.
      */
     open fun moveToNext() {
+        if (tryAdvancePanelForward()) return
         moveRight()
     }
 
@@ -327,7 +328,18 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Moves to the previous page.
      */
     open fun moveToPrevious() {
+        if (tryAdvancePanelBackward()) return
         moveLeft()
+    }
+
+    protected fun tryAdvancePanelForward(): Boolean {
+        val holder = (currentPage as? ReaderPage)?.let(::getPageHolder) ?: return false
+        return config.panelNavigation && holder.hasPanels() && holder.zoomToNextPanel()
+    }
+
+    protected fun tryAdvancePanelBackward(): Boolean {
+        val holder = (currentPage as? ReaderPage)?.let(::getPageHolder) ?: return false
+        return config.panelNavigation && holder.hasPanels() && holder.zoomToPreviousPanel()
     }
 
     /**
