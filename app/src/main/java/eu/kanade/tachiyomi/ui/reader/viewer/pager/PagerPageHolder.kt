@@ -1,8 +1,10 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.annotation.SuppressLint
-import android.graphics.BitmapFactory
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import androidx.core.view.isVisible
 import eu.kanade.presentation.util.formattedMessage
@@ -45,7 +47,6 @@ class PagerPageHolder(
 
     private var panels: List<Panel> = emptyList()
     private var currentPanelIndex = -1
-    private var panelDetectionDone = false
 
     /**
      * Item that identifies this view. Needed by the adapter to not recreate views.
@@ -154,11 +155,13 @@ class PagerPageHolder(
      */
     private suspend fun setImage() {
         progressIndicator?.setProgress(0)
+        panels = emptyList()
+        currentPanelIndex = -1
 
         val streamFn = page.stream ?: return
 
         try {
-            val (source, isAnimated, background, detectedPanels) = withIOContext {
+            val loadResult = withIOContext {
                 val source = streamFn().use { process(item, Buffer().readFrom(it)) }
                 val isAnimated = ImageUtil.isAnimatedAndSupported(source)
                 val background = if (!isAnimated && viewer.config.automaticBackground) {
@@ -171,15 +174,13 @@ class PagerPageHolder(
                 } else {
                     emptyList()
                 }
-                Quadruple(source, isAnimated, background, detectedPanels)
+                LoadResult(source, isAnimated, background, detectedPanels)
             }
             withUIContext {
-                panels = detectedPanels
-                currentPanelIndex = -1
-                panelDetectionDone = true
+                panels = loadResult.detectedPanels
                 setImage(
-                    source,
-                    isAnimated,
+                    loadResult.source,
+                    loadResult.isAnimated,
                     Config(
                         zoomDuration = viewer.config.doubleTapAnimDuration,
                         minimumScaleType = viewer.config.imageScaleType,
@@ -188,8 +189,8 @@ class PagerPageHolder(
                         landscapeZoom = viewer.config.landscapeZoom,
                     ),
                 )
-                if (!isAnimated) {
-                    pageBackground = background
+                if (!loadResult.isAnimated) {
+                    pageBackground = loadResult.background
                 }
                 removeErrorLayout()
             }
@@ -202,11 +203,34 @@ class PagerPageHolder(
     }
 
     private fun detectPanels(source: BufferedSource): List<Panel> {
-        val bitmap = BitmapFactory.decodeStream(source.peek().inputStream()) ?: return emptyList()
+        val bitmap = decodePanelBitmap(source) ?: return emptyList()
         return try {
             PanelDetector.detectPanels(bitmap, readingDirection())
         } finally {
             bitmap.recycle()
+        }
+    }
+
+    private fun decodePanelBitmap(source: BufferedSource): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        source.peek().inputStream().use {
+            BitmapFactory.decodeStream(it, null, options)
+        }
+
+        val largestDimension = maxOf(options.outWidth, options.outHeight)
+        if (largestDimension <= 0) return null
+
+        val sampleSize = generateSequence(1) { it * 2 }
+            .first { largestDimension / it <= 800 }
+
+        return source.peek().inputStream().use {
+            BitmapFactory.decodeStream(
+                it,
+                null,
+                BitmapFactory.Options().apply { inSampleSize = sampleSize },
+            )
         }
     }
 
@@ -218,7 +242,7 @@ class PagerPageHolder(
         }
     }
 
-    fun hasPanels(): Boolean = panelDetectionDone && panels.isNotEmpty()
+    fun hasPanels(): Boolean = panels.isNotEmpty()
 
     fun hasNextPanel(): Boolean = hasPanels() && currentPanelIndex < panels.lastIndex
 
@@ -385,9 +409,9 @@ class PagerPageHolder(
     }
 }
 
-private data class Quadruple<A, B, C, D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D,
+private data class LoadResult(
+    val source: BufferedSource,
+    val isAnimated: Boolean,
+    val background: Drawable?,
+    val detectedPanels: List<Panel>,
 )

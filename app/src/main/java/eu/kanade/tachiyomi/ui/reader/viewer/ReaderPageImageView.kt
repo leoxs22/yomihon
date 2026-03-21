@@ -68,6 +68,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private var pageView: View? = null
 
     private var config: Config? = null
+    private var pendingOnPageReadyDirection: Boolean? = null
 
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: ((Throwable?) -> Unit)? = null
@@ -106,19 +107,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
             if (isReady) {
                 onPageReady(forward)
             } else {
-                setOnImageEventListener(
-                    object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
-                        override fun onReady() {
-                            setupZoom(config)
-                            onPageReady(forward)
-                            this@ReaderPageImageView.onImageLoaded()
-                        }
-
-                        override fun onImageLoadError(e: Exception) {
-                            onImageLoadError(e)
-                        }
-                    },
-                )
+                pendingOnPageReadyDirection = forward
             }
         }
     }
@@ -311,7 +300,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
             object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                 override fun onReady() {
                     setupZoom(config)
-                    if (isVisibleOnScreen()) landscapeZoom(true)
+                    val direction = pendingOnPageReadyDirection
+                    pendingOnPageReadyDirection = null
+                    when {
+                        direction != null -> onPageReady(direction)
+                        isVisibleOnScreen() -> onPageReady(true)
+                    }
                     this@ReaderPageImageView.onImageLoaded()
                 }
 
