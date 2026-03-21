@@ -85,6 +85,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private var ocrPageIdentity: ReaderOcrPageIdentity? = null
     private var activeOcrOverlay: ReaderActiveOcrOverlay? = null
     private var activeOverlayLayout: ReaderOcrOverlayLayout? = null
+    private var pendingOnPageReadyDirection: Boolean? = null
 
     private val ocrOverlayBackgroundPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -153,19 +154,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
             if (isReady) {
                 onPageReady(forward)
             } else {
-                setOnImageEventListener(
-                    object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
-                        override fun onReady() {
-                            setupZoom(config)
-                            onPageReady(forward)
-                            this@ReaderPageImageView.onImageLoaded()
-                        }
-
-                        override fun onImageLoadError(e: Exception) {
-                            onImageLoadError(e)
-                        }
-                    },
-                )
+                pendingOnPageReadyDirection = forward
             }
         }
     }
@@ -382,7 +371,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
             object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                 override fun onReady() {
                     setupZoom(config)
-                    if (isVisibleOnScreen()) landscapeZoom(true)
+                    val direction = pendingOnPageReadyDirection
+                    pendingOnPageReadyDirection = null
+                    when {
+                        direction != null -> onPageReady(direction)
+                        isVisibleOnScreen() -> onPageReady(true)
+                    }
                     this@ReaderPageImageView.onImageLoaded()
                 }
 
