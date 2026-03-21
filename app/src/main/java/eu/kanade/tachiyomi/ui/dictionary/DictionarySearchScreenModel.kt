@@ -234,7 +234,9 @@ class DictionarySearchScreenModel(
             when (val result = addDictionaryCard(card)) {
                 AnkiDroidRepository.Result.Added -> {
                     // Mark expression as existing so the icon updates immediately
-                    mutableState.update { it.copy(existingTermExpressions = it.existingTermExpressions + term.expression) }
+                    mutableState.update {
+                        it.copy(existingTermExpressions = it.existingTermExpressions + term.expression)
+                    }
                     _events.send(Event.ShowMessage(UiMessage.Resource(MR.strings.anki_add_success)))
                 }
                 AnkiDroidRepository.Result.Duplicate -> {
