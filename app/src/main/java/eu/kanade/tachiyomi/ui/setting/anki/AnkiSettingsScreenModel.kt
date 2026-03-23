@@ -219,16 +219,16 @@ class AnkiSettingsScreenModel(
 
     companion object {
         val APP_FIELDS = listOf(
-            "furigana",
-            "reading",
             "expression",
-            "glossary",
-            "sentence",
-            "pitchAccent",
             "frequency",
-            "picture",
             "freqAvgValue",
             "freqLowestValue",
+            "furigana",
+            "glossary",
+            "picture",
+            "pitchAccent",
+            "reading",
+            "sentence",
         )
     }
 }

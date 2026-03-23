@@ -176,20 +176,27 @@ object SettingsAnkiScreen : SearchableSettings {
         )
 
         val appFieldResources = mapOf(
-            "furigana" to MR.strings.anki_field_furigana,
-            "reading" to MR.strings.anki_field_reading,
             "expression" to MR.strings.anki_field_expression,
-            "glossary" to MR.strings.anki_field_glossary,
-            "sentence" to MR.strings.anki_field_sentence,
-            "pitchAccent" to MR.strings.anki_field_pitch_accent,
             "frequency" to MR.strings.anki_field_frequency,
-            "picture" to MR.strings.anki_field_picture,
             "freqAvgValue" to MR.strings.anki_field_frequency_average_value,
             "freqLowestValue" to MR.strings.anki_field_frequency_lowest_value,
+            "furigana" to MR.strings.anki_field_furigana,
+            "glossary" to MR.strings.anki_field_glossary,
+            "picture" to MR.strings.anki_field_picture,
+            "pitchAccent" to MR.strings.anki_field_pitch_accent,
+            "reading" to MR.strings.anki_field_reading,
+            "sentence" to MR.strings.anki_field_sentence,
         )
 
-        val dynamicFields = state.dictionaries.map { "freqSingleValue_${it.id}" }
-        val allAppFields = AnkiSettingsScreenModel.APP_FIELDS + dynamicFields
+        val dynamicFields = state.dictionaries
+            .map { "freqSingleValue_${it.id}" }
+        val allAppFields = AnkiSettingsScreenModel.APP_FIELDS.flatMap {
+            if (it == "freqLowestValue") {
+                listOf(it) + dynamicFields
+            } else {
+                listOf(it)
+            }
+        }
 
         state.modelFields.forEach { ankiField ->
             val currentMapping = state.fieldMappings[ankiField] ?: ""
