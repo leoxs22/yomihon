@@ -1135,11 +1135,14 @@
     <string name="anki_field_mappings">Field Mappings</string>
     <string name="anki_field_empty">Empty</string>
     <string name="anki_field_reading">Reading</string>
+    <string name="anki_field_furigana">Furigana</string>
     <string name="anki_field_expression">Expression</string>
     <string name="anki_field_glossary">Glossary</string>
     <string name="anki_field_sentence">Sentence</string>
     <string name="anki_field_pitch_accent">Pitch Accent</string>
     <string name="anki_field_frequency">Frequency</string>
+    <string name="anki_field_frequency_average_value">Frequency (Average)</string>
+    <string name="anki_field_frequency_lowest_value">Frequency (Lowest)</string>
     <string name="anki_field_picture">Picture</string>
     <string name="anki_field_mapping_info">Select the default data to fill each field with when creating a card</string>
     <string name="anki_fill_with">Fill with: %s</string>

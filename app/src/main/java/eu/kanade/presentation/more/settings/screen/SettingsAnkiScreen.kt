@@ -175,11 +175,28 @@ object SettingsAnkiScreen : SearchableSettings {
             ),
         )
 
+        val appFieldResources = mapOf(
+            "furigana" to MR.strings.anki_field_furigana,
+            "reading" to MR.strings.anki_field_reading,
+            "expression" to MR.strings.anki_field_expression,
+            "glossary" to MR.strings.anki_field_glossary,
+            "sentence" to MR.strings.anki_field_sentence,
+            "pitchAccent" to MR.strings.anki_field_pitch_accent,
+            "frequency" to MR.strings.anki_field_frequency,
+            "picture" to MR.strings.anki_field_picture,
+            "frequencyAverageValue" to MR.strings.anki_field_frequency_average_value,
+            "frequencyLowestValue" to MR.strings.anki_field_frequency_lowest_value,
+        )
+
         state.modelFields.forEach { ankiField ->
             val currentMapping = state.fieldMappings[ankiField] ?: ""
 
-            val options = (listOf("") + AnkiSettingsScreenModel.APP_FIELDS).associateWith {
-                it.ifEmpty { stringResource(MR.strings.anki_field_empty) }
+            val options = (listOf("") + AnkiSettingsScreenModel.APP_FIELDS).associateWith { appField ->
+                if (appField.isEmpty()) {
+                    stringResource(MR.strings.anki_field_empty)
+                } else {
+                    stringResource(appFieldResources[appField] ?: MR.strings.anki_field_empty)
+                }
             }.toImmutableMap()
 
             mappingItems.add(
@@ -192,7 +209,10 @@ object SettingsAnkiScreen : SearchableSettings {
                             MR.strings.anki_field_empty,
                         )
                     } else {
-                        stringResource(MR.strings.anki_fill_with)
+                        stringResource(
+                            MR.strings.anki_fill_with,
+                            stringResource(appFieldResources[currentMapping] ?: MR.strings.anki_field_empty)
+                        )
                     },
                     onValueChanged = {
                         screenModel.updateFieldMapping(ankiField, it)
