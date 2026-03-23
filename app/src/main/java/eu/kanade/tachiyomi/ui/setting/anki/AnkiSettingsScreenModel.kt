@@ -219,6 +219,8 @@ class AnkiSettingsScreenModel(
             "pitchAccent",
             "frequency",
             "picture",
+            "frequencyAverageValue",
+            "frequencyLowestValue",
         )
     }
 }

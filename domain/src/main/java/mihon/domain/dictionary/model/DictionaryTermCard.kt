@@ -11,6 +11,8 @@ data class DictionaryTermCard(
     val pitchAccent: String = "",
     val frequency: String = "",
     val pictureUrl: String = "",
+    val frequencyAverageValue: String = "",
+    val frequencyLowestValue: String = "",
     val tags: Set<String> = emptySet(),
 ) {
     /**
@@ -24,6 +26,8 @@ data class DictionaryTermCard(
         "pitchAccent" -> pitchAccent
         "frequency" -> frequency
         "picture" -> pictureUrl
+        "frequencyAverageValue" -> frequencyAverageValue
+        "frequencyLowestValue" -> frequencyLowestValue
         else -> ""
     }
 }
@@ -35,6 +39,8 @@ fun DictionaryTerm.toDictionaryTermCard(
     pitchAccent: String = "",
     frequency: String = "",
     pictureUrl: String = "",
+    frequencyAverageValue: String = "",
+    frequencyLowestValue: String = "",
 ): DictionaryTermCard {
     val cardTags = buildSet {
         add("yomihon")
@@ -52,6 +58,8 @@ fun DictionaryTerm.toDictionaryTermCard(
         pitchAccent = pitchAccent,
         frequency = frequency,
         pictureUrl = pictureUrl,
+        frequencyAverageValue = frequencyAverageValue,
+        frequencyLowestValue = frequencyLowestValue,
         tags = cardTags,
     )
 }
