@@ -10,6 +10,17 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - `Fixed` - for any bug fixes.
 - `Other` - for technical stuff.
 
+## [v0.2.2] - 2026-03-23
+
+### Added
+- Add more field values for frequency dictionaries
+
+### Improved
+- Alphabetically sort Anki field value list
+
+### Fixed
+- Fix WordSelector alignment when no dictionary results
+
 ## [v0.2.1] - 2026-03-15
 
 ### Added
@@ -71,7 +82,8 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - The full changelog for Mihon releases is available in their [repository](https://github.com/mihonapp/mihon/blob/main/CHANGELOG.md).
 
 
-[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.1...main
+[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.2...main
+[v0.2.2]: https://github.com/yomihon/yomihon/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/yomihon/yomihon/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/yomihon/yomihon/compare/v0.1.1...v0.2.0
 [v0.1.1]: https://github.com/yomihon/yomihon/compare/v0.1.0...v0.1.1
