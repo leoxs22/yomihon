@@ -18,6 +18,7 @@ interface DictionaryRepository {
     suspend fun getDictionary(dictionaryId: Long): Dictionary?
     suspend fun getAllDictionaries(): List<Dictionary>
     fun subscribeToDictionaries(): Flow<List<Dictionary>>
+    suspend fun getFreqDictionaryIds(): List<Long>
 
     // Tag operations
     suspend fun insertTags(tags: List<DictionaryTag>)

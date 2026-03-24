@@ -52,7 +52,13 @@ class AnkiSettingsScreenModel(
 
                 // Load dictionaries for dictionary-specific labels
                 val dictionaries = dictionaryInteractor.getAllDictionaries()
-                mutableState.update { it.copy(dictionaries = dictionaries) }
+                val freqDictionaryIds = dictionaryInteractor.getFreqDictionaryIds()
+                mutableState.update {
+                    it.copy(
+                        dictionaries = dictionaries,
+                        freqDictionaryIds = freqDictionaryIds.toSet(),
+                    )
+                }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to load initial state" }
                 mutableState.update {
@@ -208,6 +214,7 @@ class AnkiSettingsScreenModel(
         val models: Map<Long, String> = emptyMap(),
         val modelFields: List<String> = emptyList(),
         val dictionaries: List<Dictionary> = emptyList(),
+        val freqDictionaryIds: Set<Long> = emptySet(),
         val selectedDeckId: Long = -1L,
         val selectedModelId: Long = -1L,
         val deckName: String = "Yomihon",

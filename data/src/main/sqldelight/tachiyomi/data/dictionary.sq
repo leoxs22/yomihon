@@ -109,6 +109,21 @@ SELECT *
 FROM dictionaries
 ORDER BY priority ASC, title ASC;
 
+getFreqDictionaryIds:
+SELECT _id
+FROM dictionaries
+WHERE is_enabled = 1
+  AND (
+    SELECT COUNT(*) 
+    FROM (
+      SELECT 1 
+      FROM dictionary_term_meta 
+      WHERE dictionary_term_meta.dictionary_id = dictionaries._id 
+        AND dictionary_term_meta.mode = 'freq' 
+      LIMIT 5
+    )
+  ) = 5;
+
 selectLastInsertedRowId:
 SELECT last_insert_rowid();
 

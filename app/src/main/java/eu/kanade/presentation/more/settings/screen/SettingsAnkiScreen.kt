@@ -189,6 +189,7 @@ object SettingsAnkiScreen : SearchableSettings {
         )
 
         val dynamicFields = state.dictionaries
+            .filter { it.id in state.freqDictionaryIds }
             .map { "freqSingleValue_${it.id}" }
         val allAppFields = AnkiSettingsScreenModel.APP_FIELDS.flatMap {
             if (it == "freqLowestValue") {

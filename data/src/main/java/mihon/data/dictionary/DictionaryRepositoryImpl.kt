@@ -101,6 +101,12 @@ class DictionaryRepositoryImpl(
         }
     }
 
+    override suspend fun getFreqDictionaryIds(): List<Long> {
+        return handler.awaitList {
+            dictionaryQueries.getFreqDictionaryIds()
+        }
+    }
+
     // Tag operations
 
     override suspend fun insertTags(tags: List<DictionaryTag>) {
