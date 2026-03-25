@@ -153,6 +153,14 @@
     <string name="action_install">Install</string>
     <string name="action_share">Share</string>
     <string name="action_save">Save</string>
+    <string name="save_search">Save search</string>
+    <string name="save_search_hint">Search name</string>
+    <string name="saved_searches">Saved searches</string>
+    <string name="saved_searches_delete">Saved searches (hold to delete)</string>
+    <string name="save_search_delete">Delete saved search query?</string>
+    <string name="save_search_delete_message">Are you sure you wish to delete your saved search query: '%1$s'?</string>
+    <string name="save_search_invalid">Saved search invalid, filters have changed</string>
+    <string name="save_search_invalid_name">Invalid saved search name</string>
     <string name="action_reset">Reset</string>
     <string name="action_revert_to_default">Revert to default</string>
     <!-- missing undo feature after Compose rewrite #7454 -->
