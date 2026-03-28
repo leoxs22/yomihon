@@ -415,8 +415,13 @@ class Downloader(
 
             download.status = Download.State.DOWNLOADED
             if (downloadPreferences.autoOcrOnDownload().get()) {
-                download.chapter.id.let { chapterId ->
-                    ocrScanManager.enqueue(listOf(chapterId))
+                try {
+                    ocrScanManager.enqueue(listOf(download.chapter.id))
+                } catch (e: Throwable) {
+                    if (e is CancellationException) throw e
+                    logcat(LogPriority.ERROR, e) {
+                        "Failed to enqueue chapterId=${download.chapter.id} for auto OCR"
+                    }
                 }
             }
         } catch (error: Throwable) {

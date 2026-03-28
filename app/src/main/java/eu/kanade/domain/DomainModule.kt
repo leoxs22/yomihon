@@ -31,6 +31,8 @@ import eu.kanade.tachiyomi.data.ocr.OcrPageSourceResolver
 import eu.kanade.tachiyomi.data.ocr.OcrScanManager
 import eu.kanade.tachiyomi.data.ocr.OcrScanNotifier
 import eu.kanade.tachiyomi.data.ocr.OcrScanStore
+import eu.kanade.tachiyomi.data.ocr.OcrScanWorkerController
+import eu.kanade.tachiyomi.data.ocr.WorkManagerOcrScanWorkerController
 import mihon.data.ankidroid.AnkiDroidRepositoryImpl
 import mihon.data.dictionary.DictionaryParserImpl
 import mihon.data.dictionary.DictionaryRepositoryImpl
@@ -259,11 +261,12 @@ class DomainModule : InjektModule {
                 context = get<Application>(),
             )
         }
-        addSingletonFactory { OcrScanStore(get<Application>()) }
+        addSingletonFactory { OcrScanStore(get<Application>(), get()) }
         addSingletonFactory { OcrPageSourceResolver(get<Application>(), get(), get(), get()) }
         addSingletonFactory { OcrScanNotifier(get<Application>()) }
         addSingletonFactory { OcrChapterScanner(get(), get(), get(), get(), get(), get()) }
-        addSingletonFactory { OcrScanManager(get<Application>(), get(), get(), get()) }
+        addSingletonFactory<OcrScanWorkerController> { WorkManagerOcrScanWorkerController(get<Application>()) }
+        addSingletonFactory { OcrScanManager(get(), get(), get(), get()) }
         addFactory { OcrProcessor(get()) }
         addFactory { RunOcrScanSession(get()) }
         addFactory { ScanPageOcr(get()) }

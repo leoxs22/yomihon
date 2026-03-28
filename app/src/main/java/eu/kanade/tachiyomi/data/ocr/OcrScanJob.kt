@@ -3,16 +3,24 @@ package eu.kanade.tachiyomi.data.ocr
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
+import androidx.lifecycle.asFlow
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.setForegroundSafely
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -43,8 +51,17 @@ internal class OcrScanJob(
 
     override suspend fun doWork(): Result {
         setForegroundSafely()
-        ocrScanManager.runPendingQueue()
-        return Result.success()
+        return try {
+            ocrScanManager.runPendingQueue()
+            Result.success()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.ERROR, e) { "OCR scan worker failed unexpectedly; scheduling retry" }
+            Result.retry()
+        } finally {
+            applicationContext.cancelNotification(Notifications.ID_OCR_PROGRESS)
+        }
     }
 
     companion object {
@@ -55,7 +72,26 @@ internal class OcrScanJob(
                 .addTag(TAG)
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)
+                .enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
+        }
+
+        fun stop(context: Context) {
+            WorkManager.getInstance(context)
+                .cancelUniqueWork(TAG)
+        }
+
+        fun isRunning(context: Context): Boolean {
+            return WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(TAG)
+                .get()
+                .let { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
+        }
+
+        fun isRunningFlow(context: Context): Flow<Boolean> {
+            return WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkLiveData(TAG)
+                .asFlow()
+                .map { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
         }
     }
 }

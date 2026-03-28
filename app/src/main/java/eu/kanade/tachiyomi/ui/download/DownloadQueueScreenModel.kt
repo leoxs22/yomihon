@@ -6,6 +6,9 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.ocr.OcrScanManager
+import eu.kanade.tachiyomi.data.ocr.OcrScanQueueEntry
+import eu.kanade.tachiyomi.data.ocr.OcrScanQueueState
 import eu.kanade.tachiyomi.databinding.DownloadListBinding
 import eu.kanade.tachiyomi.source.model.Page
 import kotlinx.coroutines.Job
@@ -18,18 +21,31 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import tachiyomi.domain.chapter.interactor.GetChapter
+import tachiyomi.domain.manga.interactor.GetManga
+import tachiyomi.domain.source.service.SourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class DownloadQueueScreenModel(
     private val downloadManager: DownloadManager = Injekt.get(),
+    private val ocrScanManager: OcrScanManager = Injekt.get(),
+    private val getChapter: GetChapter = Injekt.get(),
+    private val getManga: GetManga = Injekt.get(),
+    private val sourceManager: SourceManager = Injekt.get(),
 ) : ScreenModel {
 
     private val _state = MutableStateFlow(emptyList<DownloadHeaderItem>())
     val state = _state.asStateFlow()
+
+    private val _ocrQueueState = MutableStateFlow(OcrQueueUiState())
+    internal val ocrQueueState = _ocrQueueState.asStateFlow()
+
+    private val ocrChapterMetadataCache = mutableMapOf<Long, OcrQueueChapterMetadata>()
 
     lateinit var controllerBinding: DownloadListBinding
 
@@ -129,6 +145,65 @@ class DownloadQueueScreenModel(
                 }
                 .collect { newList -> _state.update { newList } }
         }
+
+        screenModelScope.launch {
+            ocrScanManager.queueState
+                .mapLatest(::buildOcrQueueUiState)
+                .collectLatest { state -> _ocrQueueState.value = state }
+        }
+    }
+
+    private suspend fun buildOcrQueueUiState(queueState: OcrScanQueueState): OcrQueueUiState {
+        if (!queueState.isActive) {
+            return OcrQueueUiState(isPaused = queueState.isPaused)
+        }
+
+        val items = mutableListOf<OcrQueueChapterItem>()
+
+        queueState.entries.forEach { entry ->
+            val progress = queueState.activeProgress?.takeIf { it.chapterId == entry.chapterId }
+            val chapterMetadata = resolveOcrQueueChapter(entry.chapterId)
+            items += OcrQueueChapterItem(
+                chapterId = entry.chapterId,
+                mangaId = chapterMetadata.mangaId,
+                sourceName = chapterMetadata.sourceName,
+                mangaTitle = progress?.mangaTitle ?: chapterMetadata.mangaTitle,
+                chapterName = progress?.chapterName ?: chapterMetadata.chapterName,
+                chapterNumber = chapterMetadata.chapterNumber,
+                processedPages = progress?.processedPages ?: 0,
+                totalPages = progress?.totalPages,
+                queueState = entry.state,
+                lastError = entry.lastError,
+            )
+        }
+
+        return OcrQueueUiState(
+            items = items,
+            isPaused = queueState.isPaused,
+        )
+    }
+
+    private suspend fun resolveOcrQueueChapter(chapterId: Long): OcrQueueChapterMetadata {
+        return ocrChapterMetadataCache[chapterId] ?: run {
+            val chapter = getChapter.await(chapterId)
+            val manga = chapter?.let { getManga.await(it.mangaId) }
+            val sourceName = manga?.let { sourceManager.getOrStub(it.source).name }.orEmpty()
+            val mangaTitle = manga?.title.orEmpty()
+            val chapterName = chapter
+                ?.name
+                ?.takeIf(String::isNotBlank)
+                ?: chapterId.toString()
+
+            OcrQueueChapterMetadata(
+                mangaId = chapter?.mangaId ?: -1L,
+                sourceName = sourceName,
+                mangaTitle = mangaTitle,
+                chapterName = chapterName,
+                chapterNumber = chapter?.chapterNumber ?: -1.0,
+            ).also {
+                ocrChapterMetadataCache[chapterId] = it
+            }
+        }
     }
 
     override fun onDispose() {
@@ -136,25 +211,39 @@ class DownloadQueueScreenModel(
             job.cancel()
         }
         progressJobs.clear()
+        ocrChapterMetadataCache.clear()
         adapter = null
     }
 
-    val isDownloaderRunning = downloadManager.isDownloaderRunning
-        .stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isAnyQueueRunning = combine(
+        downloadManager.isDownloaderRunning,
+        ocrScanManager.isScannerRunning,
+    ) { isDownloading, isScanning ->
+        isDownloading || isScanning
+    }.stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun getDownloadStatusFlow() = downloadManager.statusFlow()
     fun getDownloadProgressFlow() = downloadManager.progressFlow()
 
-    fun startDownloads() {
+    fun resumeQueues() {
         downloadManager.startDownloads()
+        screenModelScope.launch {
+            ocrScanManager.resume()
+        }
     }
 
-    fun pauseDownloads() {
+    fun pauseQueues() {
         downloadManager.pauseDownloads()
+        screenModelScope.launch {
+            ocrScanManager.pause()
+        }
     }
 
-    fun clearQueue() {
+    fun clearQueues() {
         downloadManager.clearQueue()
+        screenModelScope.launch {
+            ocrScanManager.clearQueue()
+        }
     }
 
     fun reorder(downloads: List<Download>) {
@@ -178,6 +267,59 @@ class DownloadQueueScreenModel(
             newDownloads.addAll(headerItem.subItems.map { it.download })
         }
         reorder(newDownloads)
+    }
+
+    internal fun handleOcrAction(
+        chapterId: Long,
+        action: OcrQueueMenuAction,
+    ) {
+        val currentItems = _ocrQueueState.value.items
+        if (currentItems.isEmpty()) return
+
+        val selectedItem = currentItems.firstOrNull { it.chapterId == chapterId } ?: return
+        val selectedSeries = currentItems.filter { it.mangaId == selectedItem.mangaId }
+        val otherSeries = currentItems.filterNot { it.mangaId == selectedItem.mangaId }
+
+        when (action) {
+            OcrQueueMenuAction.MoveToTop -> {
+                val reorderedItems = currentItems.toMutableList().apply {
+                    removeAll { it.chapterId == chapterId }
+                    add(0, selectedItem)
+                }
+                reorderOcrQueue(reorderedItems.map(OcrQueueChapterItem::chapterId))
+            }
+            OcrQueueMenuAction.MoveSeriesToTop -> {
+                reorderOcrQueue((selectedSeries + otherSeries).map(OcrQueueChapterItem::chapterId))
+            }
+            OcrQueueMenuAction.MoveToBottom -> {
+                val reorderedItems = currentItems.toMutableList().apply {
+                    removeAll { it.chapterId == chapterId }
+                    add(selectedItem)
+                }
+                reorderOcrQueue(reorderedItems.map(OcrQueueChapterItem::chapterId))
+            }
+            OcrQueueMenuAction.MoveSeriesToBottom -> {
+                reorderOcrQueue((otherSeries + selectedSeries).map(OcrQueueChapterItem::chapterId))
+            }
+            OcrQueueMenuAction.Cancel -> {
+                cancelOcrQueue(listOf(chapterId))
+            }
+            OcrQueueMenuAction.CancelSeries -> {
+                cancelOcrQueue(selectedSeries.map(OcrQueueChapterItem::chapterId))
+            }
+        }
+    }
+
+    private fun reorderOcrQueue(chapterIds: List<Long>) {
+        screenModelScope.launch {
+            ocrScanManager.reorderQueue(chapterIds)
+        }
+    }
+
+    private fun cancelOcrQueue(chapterIds: Collection<Long>) {
+        screenModelScope.launch {
+            ocrScanManager.cancelQueuedChapters(chapterIds)
+        }
     }
 
     /**
@@ -267,3 +409,41 @@ class DownloadQueueScreenModel(
         return controllerBinding.root.findViewHolderForItemId(download.chapter.id) as? DownloadHolder
     }
 }
+
+internal data class OcrQueueUiState(
+    val items: List<OcrQueueChapterItem> = emptyList(),
+    val isPaused: Boolean = false,
+) {
+    val totalCount: Int
+        get() = items.size
+}
+
+internal data class OcrQueueChapterItem(
+    val chapterId: Long,
+    val mangaId: Long,
+    val sourceName: String,
+    val mangaTitle: String,
+    val chapterName: String,
+    val chapterNumber: Double,
+    val processedPages: Int,
+    val totalPages: Int?,
+    val queueState: OcrScanQueueEntry.State,
+    val lastError: String?,
+)
+
+internal enum class OcrQueueMenuAction {
+    MoveToTop,
+    MoveSeriesToTop,
+    MoveToBottom,
+    MoveSeriesToBottom,
+    Cancel,
+    CancelSeries,
+}
+
+private data class OcrQueueChapterMetadata(
+    val mangaId: Long,
+    val sourceName: String,
+    val mangaTitle: String,
+    val chapterName: String,
+    val chapterNumber: Double,
+)

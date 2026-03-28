@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.ocr
 
+import android.graphics.Bitmap
 import kotlinx.coroutines.CancellationException
 import logcat.LogPriority
 import mihon.domain.ocr.interactor.ClearCachedChapterOcr
@@ -52,79 +53,102 @@ internal class OcrChapterScanner(
             return false
         }
 
-        return runOcrScanSession.await {
-            clearCachedChapterOcr.await(chapterId)
-            onCacheStateChanged(chapterId, false)
+        return try {
+            runOcrScanSession.await {
+                clearCachedChapterOcr.await(chapterId)
+                onCacheStateChanged(chapterId, false)
 
-            val resolvedPages = pageSourceResolver.resolve(manga, chapter)
-            resolvedPages.use { pages ->
-                if (pages.pages.isEmpty()) {
-                    onError(
-                        OcrChapterScanError(
-                            mangaId = manga.id,
-                            mangaTitle = manga.title,
-                            chapterId = chapterId,
-                            chapterName = chapter.name,
-                            error = "No pages available for OCR scanning",
-                        ),
-                    )
-                    false
-                } else {
-                    val totalPages = pages.pages.size
-                    var lastProgress = OcrChapterScanProgress(
-                        mangaId = manga.id,
-                        mangaTitle = manga.title,
-                        chapterId = chapterId,
-                        chapterName = chapter.name,
-                        processedPages = 0,
-                        totalPages = totalPages,
-                    )
-
-                    onProgress(lastProgress)
-
-                    try {
-                        var chapterHasCachedResults = false
-                        pages.pages.forEachIndexed { index, page ->
-                            val bitmap = page.openBitmap() ?: error("Unable to decode page ${page.pageIndex + 1}")
-                            try {
-                                scanPageOcr.await(chapterId, page.pageIndex, bitmap)
-                            } finally {
-                                if (!bitmap.isRecycled) {
-                                    bitmap.recycle()
-                                }
-                            }
-
-                            if (!chapterHasCachedResults) {
-                                chapterHasCachedResults = true
-                                onCacheStateChanged(chapterId, true)
-                            }
-
-                            lastProgress = lastProgress.copy(processedPages = index + 1)
-                            onProgress(lastProgress)
-                        }
-
-                        onComplete(lastProgress)
-                        true
-                    } catch (e: Throwable) {
-                        if (e is CancellationException) {
-                            throw e
-                        }
-                        logcat(LogPriority.ERROR, e) { "Failed to scan OCR for chapterId=$chapterId" }
-                        clearCachedChapterOcr.await(chapterId)
-                        onCacheStateChanged(chapterId, false)
+                val resolvedPages = pageSourceResolver.resolve(manga, chapter)
+                resolvedPages.use { pages ->
+                    if (pages.pages.isEmpty()) {
                         onError(
                             OcrChapterScanError(
                                 mangaId = manga.id,
                                 mangaTitle = manga.title,
                                 chapterId = chapterId,
                                 chapterName = chapter.name,
-                                error = e.message,
+                                error = "No pages available for OCR scanning",
                             ),
                         )
                         false
+                    } else {
+                        val totalPages = pages.pages.size
+                        var lastProgress = OcrChapterScanProgress(
+                            mangaId = manga.id,
+                            mangaTitle = manga.title,
+                            chapterId = chapterId,
+                            chapterName = chapter.name,
+                            processedPages = 0,
+                            totalPages = totalPages,
+                        )
+
+                        onProgress(lastProgress)
+
+                        try {
+                            var chapterHasCachedResults = false
+                            pages.pages.forEachIndexed { index, page ->
+                                val decodedBitmap = page.openBitmap() ?: error("Unable to decode page ${page.pageIndex + 1}")
+                                val bitmap = decodedBitmap.toArgb8888Bitmap()
+                                try {
+                                    scanPageOcr.await(chapterId, page.pageIndex, bitmap)
+                                } finally {
+                                    if (bitmap !== decodedBitmap && !decodedBitmap.isRecycled) {
+                                        decodedBitmap.recycle()
+                                    }
+                                    if (!bitmap.isRecycled) {
+                                        bitmap.recycle()
+                                    }
+                                }
+
+                                if (!chapterHasCachedResults) {
+                                    chapterHasCachedResults = true
+                                    onCacheStateChanged(chapterId, true)
+                                }
+
+                                lastProgress = lastProgress.copy(processedPages = index + 1)
+                                onProgress(lastProgress)
+                            }
+
+                            onComplete(lastProgress)
+                            true
+                        } catch (e: Throwable) {
+                            if (e is CancellationException) {
+                                throw e
+                            }
+                            logcat(LogPriority.ERROR, e) { "Failed to scan OCR for chapterId=$chapterId" }
+                            clearCachedChapterOcr.await(chapterId)
+                            onCacheStateChanged(chapterId, false)
+                            onError(
+                                OcrChapterScanError(
+                                    mangaId = manga.id,
+                                    mangaTitle = manga.title,
+                                    chapterId = chapterId,
+                                    chapterName = chapter.name,
+                                    error = e.message,
+                                ),
+                            )
+                            false
+                        }
                     }
                 }
             }
+        } catch (e: Throwable) {
+            if (e is CancellationException) {
+                throw e
+            }
+            logcat(LogPriority.ERROR, e) { "Failed to start OCR scan for chapterId=$chapterId" }
+            clearCachedChapterOcr.await(chapterId)
+            onCacheStateChanged(chapterId, false)
+            onError(
+                OcrChapterScanError(
+                    mangaId = manga.id,
+                    mangaTitle = manga.title,
+                    chapterId = chapterId,
+                    chapterName = chapter.name,
+                    error = e.message,
+                ),
+            )
+            false
         }
     }
 }
@@ -145,3 +169,10 @@ internal data class OcrChapterScanError(
     val chapterName: String,
     val error: String?,
 )
+
+private fun Bitmap.toArgb8888Bitmap(): Bitmap {
+    if (config == Bitmap.Config.ARGB_8888) {
+        return this
+    }
+    return copy(Bitmap.Config.ARGB_8888, false) ?: this
+}
