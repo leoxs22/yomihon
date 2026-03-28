@@ -3,6 +3,9 @@ package mihon.data.ocr
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import com.google.ai.edge.litert.Environment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +24,9 @@ import mihon.domain.ocr.repository.OcrRepository
 import tachiyomi.core.common.preference.AndroidPreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.core.common.util.system.logcat
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 /**
  * OCR repository implementation that manages engine selection, page scanning, and OCR cache.
@@ -30,6 +36,7 @@ class OcrRepositoryImpl(
 ) : OcrRepository {
     private val preferenceStore = AndroidPreferenceStore(context)
     private val ocrModelPref = preferenceStore.getEnum("pref_ocr_model", OcrModel.LEGACY)
+    private val wifiOnlyPref = preferenceStore.getBoolean("pref_download_only_over_wifi_key", true)
 
     private val environment by lazy { Environment.create() }
     private val textPostprocessor by lazy { TextPostprocessor() }
@@ -66,6 +73,44 @@ class OcrRepositoryImpl(
             OcrModel.FAST -> EngineType.FAST
             OcrModel.GLENS -> EngineType.GLENS
         }
+    }
+
+    private fun requiresWifiForScan(): Boolean {
+        return wifiOnlyPref.get()
+    }
+
+    private fun checkWifiForScan() {
+        if (requiresWifiForScan() && !isConnectedToWifi()) {
+            throw OcrException.ConnectionError()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isConnectedToWifi(): Boolean {
+        val connectivityManager = context.getSystemService(ConnectivityManager::class.java) ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val activeNetwork = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        } else {
+            connectivityManager.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
+        }
+    }
+
+    private fun isConnectivityFailure(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (
+                current is UnknownHostException ||
+                current is ConnectException ||
+                current is SocketTimeoutException ||
+                current.message?.contains("Unable to resolve host", ignoreCase = true) == true
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     private suspend fun getRecognitionEngine(type: EngineType): OcrEngine {
@@ -263,7 +308,16 @@ class OcrRepositoryImpl(
         image: Bitmap,
         modelKey: OcrModel,
     ): OcrPageResult {
-        val result = getGlensEngine().recognizePage(image)
+        checkWifiForScan()
+        val result = try {
+            getGlensEngine().recognizePage(image)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (isConnectivityFailure(error)) {
+                throw OcrException.ConnectionError(error)
+            }
+            throw error
+        }
         return OcrPageResult(
             chapterId = chapterId,
             pageIndex = pageIndex,
