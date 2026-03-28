@@ -33,6 +33,8 @@ class DictionaryRepositoryImpl(
                 description = dictionary.description,
                 attribution = dictionary.attribution,
                 styles = dictionary.styles,
+                source_language = dictionary.sourceLanguage,
+                target_language = dictionary.targetLanguage,
                 // Store boolean as integer (1 = true, 0 = false)
                 is_enabled = if (dictionary.isEnabled) 1L else 0L,
                 priority = dictionary.priority.toLong(),
@@ -54,6 +56,8 @@ class DictionaryRepositoryImpl(
                 description = dictionary.description,
                 attribution = dictionary.attribution,
                 styles = dictionary.styles,
+                source_language = dictionary.sourceLanguage,
+                target_language = dictionary.targetLanguage,
                 // Store boolean as integer (1 = true, 0 = false)
                 is_enabled = if (dictionary.isEnabled) 1L else 0L,
                 priority = dictionary.priority.toLong(),
@@ -94,6 +98,12 @@ class DictionaryRepositoryImpl(
     override fun subscribeToDictionaries(): Flow<List<Dictionary>> {
         return handler.subscribeToList {
             dictionaryQueries.getAllDictionaries(::mapDictionary)
+        }
+    }
+
+    override suspend fun getFreqDictionaryIds(): List<Long> {
+        return handler.awaitList {
+            dictionaryQueries.getFreqDictionaryIds()
         }
     }
 
@@ -290,6 +300,8 @@ class DictionaryRepositoryImpl(
         description: String?,
         attribution: String?,
         styles: String?,
+        sourceLanguage: String?,
+        targetLanguage: String?,
         isEnabled: Long,
         priority: Long,
         dateAdded: Long,
@@ -304,6 +316,8 @@ class DictionaryRepositoryImpl(
             description = description,
             attribution = attribution,
             styles = styles,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage,
             isEnabled = isEnabled == 1L,
             priority = priority.toInt(),
             dateAdded = dateAdded,

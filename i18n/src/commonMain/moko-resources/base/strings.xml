@@ -1100,6 +1100,16 @@
     <string name="action_move_down">Move down</string>
     <string name="label_priority">Priority:</string>
 
+    <!-- Dictionary Parser Preferences -->
+    <string name="pref_category_dictionary_parser">Dictionary Parser</string>
+    <string name="pref_parser_language_override">Parser language override</string>
+    <string name="pref_parser_language_override_summary">Force a specific language parser instead of auto-detecting from the query text</string>
+    <string name="parser_language_auto">Auto-detect</string>
+    <string name="parser_language_japanese">Japanese</string>
+    <string name="parser_language_korean">Korean</string>
+    <string name="parser_language_chinese">Chinese</string>
+    <string name="parser_language_english">English</string>
+
     <!-- AnkiDroid Settings -->
     <string name="anki_add_success">Added card to AnkiDroid</string>
     <string name="anki_add_duplicate">Duplicate card not added</string>
@@ -1126,11 +1136,15 @@
     <string name="anki_field_mappings">Field Mappings</string>
     <string name="anki_field_empty">Empty</string>
     <string name="anki_field_reading">Reading</string>
+    <string name="anki_field_furigana">Furigana</string>
     <string name="anki_field_expression">Expression</string>
     <string name="anki_field_glossary">Glossary</string>
     <string name="anki_field_sentence">Sentence</string>
     <string name="anki_field_pitch_accent">Pitch Accent</string>
-    <string name="anki_field_frequency">Frequency</string>
+    <string name="anki_field_frequency">Frequency (All)</string>
+    <string name="anki_field_frequency_average_value">Frequency (Average)</string>
+    <string name="anki_field_frequency_lowest_value">Frequency (Lowest)</string>
+    <string name="anki_field_frequency_single_value">Frequency (%s)</string>
     <string name="anki_field_picture">Picture</string>
     <string name="anki_field_mapping_info">Select the default data to fill each field with when creating a card</string>
     <string name="anki_fill_with">Fill with: %s</string>

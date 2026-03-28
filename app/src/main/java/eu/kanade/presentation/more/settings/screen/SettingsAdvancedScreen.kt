@@ -25,6 +25,7 @@ import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.dictionary.DictionaryPreferences
 import eu.kanade.domain.extension.interactor.TrustExtension
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.advanced.ClearDatabaseScreen
@@ -58,6 +59,7 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.domain.dictionary.interactor.ParserLanguage
 import okhttp3.Headers
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withUIContext
@@ -130,6 +132,7 @@ object SettingsAdvancedScreen : SearchableSettings {
             getLibraryGroup(libraryPreferences = libraryPreferences),
             getReaderGroup(basePreferences = basePreferences),
             getExtensionsGroup(basePreferences = basePreferences),
+            getDictionaryGroup(),
         )
     }
 
@@ -447,6 +450,28 @@ object SettingsAdvancedScreen : SearchableSettings {
                         trustExtension.revokeAll()
                         context.toast(MR.strings.requires_app_restart)
                     },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getDictionaryGroup(): Preference.PreferenceGroup {
+        val dictionaryPreferences = remember { Injekt.get<DictionaryPreferences>() }
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_dictionary_parser),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = dictionaryPreferences.parserLanguageOverride(),
+                    entries = buildMap {
+                        put(ParserLanguage.AUTO, stringResource(MR.strings.parser_language_auto))
+                        put(ParserLanguage.JAPANESE, stringResource(MR.strings.parser_language_japanese))
+                        put(ParserLanguage.KOREAN, stringResource(MR.strings.parser_language_korean))
+                        put(ParserLanguage.CHINESE, stringResource(MR.strings.parser_language_chinese))
+                        put(ParserLanguage.ENGLISH, stringResource(MR.strings.parser_language_english))
+                    }.toImmutableMap(),
+                    title = stringResource(MR.strings.pref_parser_language_override),
+                    subtitle = stringResource(MR.strings.pref_parser_language_override_summary),
                 ),
             ),
         )

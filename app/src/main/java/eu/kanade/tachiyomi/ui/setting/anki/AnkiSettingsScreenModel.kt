@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import mihon.domain.ankidroid.repository.AnkiDroidRepository
+import mihon.domain.dictionary.interactor.DictionaryInteractor
+import mihon.domain.dictionary.model.Dictionary
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.ankidroid.service.AnkiDroidPreferences
 import tachiyomi.i18n.MR
@@ -18,6 +20,7 @@ class AnkiSettingsScreenModel(
     private val ankiDroidRepository: AnkiDroidRepository = Injekt.get(),
     private val ankiDroidPreferences: AnkiDroidPreferences = Injekt.get(),
     private val context: Application = Injekt.get(),
+    private val dictionaryInteractor: DictionaryInteractor = Injekt.get(),
 ) : StateScreenModel<AnkiSettingsScreenModel.State>(State()) {
 
     init {
@@ -46,6 +49,16 @@ class AnkiSettingsScreenModel(
 
                 // Load data from AnkiDroid API
                 loadAnkiData()
+
+                // Load dictionaries for dictionary-specific labels
+                val dictionaries = dictionaryInteractor.getAllDictionaries()
+                val freqDictionaryIds = dictionaryInteractor.getFreqDictionaryIds()
+                mutableState.update {
+                    it.copy(
+                        dictionaries = dictionaries,
+                        freqDictionaryIds = freqDictionaryIds.toSet(),
+                    )
+                }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to load initial state" }
                 mutableState.update {
@@ -200,6 +213,8 @@ class AnkiSettingsScreenModel(
         val decks: Map<Long, String> = emptyMap(),
         val models: Map<Long, String> = emptyMap(),
         val modelFields: List<String> = emptyList(),
+        val dictionaries: List<Dictionary> = emptyList(),
+        val freqDictionaryIds: Set<Long> = emptySet(),
         val selectedDeckId: Long = -1L,
         val selectedModelId: Long = -1L,
         val deckName: String = "Yomihon",
@@ -211,14 +226,16 @@ class AnkiSettingsScreenModel(
 
     companion object {
         val APP_FIELDS = listOf(
-            "furigana",
-            "reading",
             "expression",
-            "glossary",
-            "sentence",
-            "pitchAccent",
             "frequency",
+            "freqAvgValue",
+            "freqLowestValue",
+            "furigana",
+            "glossary",
             "picture",
+            "pitchAccent",
+            "reading",
+            "sentence",
         )
     }
 }

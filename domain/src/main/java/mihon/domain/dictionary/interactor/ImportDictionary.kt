@@ -41,6 +41,8 @@ class ImportDictionary(
             description = index.description,
             attribution = index.attribution,
             styles = styles,
+            sourceLanguage = index.sourceLanguage,
+            targetLanguage = index.targetLanguage,
             priority = 1,
         )
         return dictionaryRepository.insertDictionary(dictionary)

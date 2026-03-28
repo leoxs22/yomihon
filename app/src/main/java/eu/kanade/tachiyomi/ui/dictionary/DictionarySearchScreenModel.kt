@@ -6,6 +6,7 @@ import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.dictionary.DictionaryPreferences
 import eu.kanade.presentation.dictionary.components.FrequencyFormatter
 import eu.kanade.presentation.dictionary.components.PitchAccentFormatter
 import kotlinx.coroutines.channels.Channel
@@ -34,6 +35,7 @@ class DictionarySearchScreenModel(
     private val dictionaryInteractor: DictionaryInteractor = Injekt.get(),
     private val addDictionaryCard: AddDictionaryCard = Injekt.get(),
     private val findExistingAnkiNotes: FindExistingAnkiNotes = Injekt.get(),
+    private val dictionaryPreferences: DictionaryPreferences = Injekt.get(),
 ) : StateScreenModel<DictionarySearchScreenModel.State>(State()) {
 
     val snackbarHostState = SnackbarHostState()
@@ -138,10 +140,18 @@ class DictionarySearchScreenModel(
                     return@launch
                 }
 
-                // Get the longest dictionary match starting from the first character
-                val word = searchDictionaryTerms.findFirstWord(sentence, enabledDictionaryIds)
+                // Get the longest dictionary match starting from the first character (or words).
+                val parserLanguage = dictionaryPreferences.parserLanguageOverride().get()
+                val firstWordMatch = searchDictionaryTerms.findFirstWordMatch(
+                    sentence,
+                    enabledDictionaryIds,
+                    parserLanguage,
+                )
+                val word = firstWordMatch.word
+                val rangeStart = highlightStart + firstWordMatch.sourceOffset
+                val rangeEnd = rangeStart + firstWordMatch.sourceLength
 
-                val cacheKey = "$word|${enabledDictionaryIds.joinToString(",")}"
+                val cacheKey = "$word|${enabledDictionaryIds.joinToString(",")}|${parserLanguage.name}"
 
                 // Check cache before searching
                 val cachedEntry = searchCache[cacheKey]
@@ -151,7 +161,7 @@ class DictionarySearchScreenModel(
                         it.copy(
                             results = SearchResults(
                                 query = query,
-                                highlightRange = highlightStart to (highlightStart + word.length),
+                                highlightRange = rangeStart to rangeEnd,
                                 items = cachedEntry.results,
                                 termMetaMap = cachedEntry.termMetaMap,
                             ),
@@ -163,7 +173,7 @@ class DictionarySearchScreenModel(
                 }
 
                 // Fetch term results and meta (frequency data) for all results
-                val items = searchDictionaryTerms.search(word, enabledDictionaryIds)
+                val items = searchDictionaryTerms.search(word, enabledDictionaryIds, parserLanguage)
                 val expressions = items.map { it.expression }.distinct()
                 val termMetaMap = searchDictionaryTerms.getTermMeta(expressions, enabledDictionaryIds)
 
@@ -173,7 +183,7 @@ class DictionarySearchScreenModel(
                     it.copy(
                         results = SearchResults(
                             query = query,
-                            highlightRange = highlightStart to (highlightStart + word.length),
+                            highlightRange = rangeStart to rangeEnd,
                             items = items,
                             termMetaMap = termMetaMap,
                         ),
@@ -222,6 +232,23 @@ class DictionarySearchScreenModel(
             val frequencyText = formatFrequencyText(termMeta)
             val pictureUrl = pictureUri?.toString() ?: ""
 
+            val frequencies = FrequencyFormatter.parseFrequencies(termMeta)
+            val numericValues = frequencies.mapNotNull { it.numericFrequency }
+
+            val minValuesPerDict = frequencies
+                .filter { it.numericFrequency != null }
+                .groupBy { it.dictionaryId }
+                .mapValues { (_, dictFrequencies) -> dictFrequencies.minOf { it.numericFrequency!! } }
+
+            val avgFreq = minValuesPerDict.values
+                .takeIf { it.isNotEmpty() }
+                ?.average()
+                ?.toInt()
+                ?.toString()
+                ?: ""
+            val minFreq = numericValues.minOrNull()?.toString() ?: ""
+            val singleFreqValues = minValuesPerDict.mapValues { it.value.toString() }
+
             val card = term.toDictionaryTermCard(
                 dictionaryName = dictionaryName,
                 glossaryHtml = glossaryHtml,
@@ -229,12 +256,17 @@ class DictionarySearchScreenModel(
                 pitchAccent = pitchAccentSvg,
                 frequency = frequencyText,
                 pictureUrl = pictureUrl,
+                freqAvgValue = avgFreq,
+                freqLowestValue = minFreq,
+                singleFreqValues = singleFreqValues,
             )
 
             when (val result = addDictionaryCard(card)) {
                 AnkiDroidRepository.Result.Added -> {
                     // Mark expression as existing so the icon updates immediately
-                    mutableState.update { it.copy(existingTermExpressions = it.existingTermExpressions + term.expression) }
+                    mutableState.update {
+                        it.copy(existingTermExpressions = it.existingTermExpressions + term.expression)
+                    }
                     _events.send(Event.ShowMessage(UiMessage.Resource(MR.strings.anki_add_success)))
                 }
                 AnkiDroidRepository.Result.Duplicate -> {
@@ -252,13 +284,13 @@ class DictionarySearchScreenModel(
     }
 
     private fun formatFrequencyText(termMeta: List<DictionaryTermMeta>): String {
-        val grouped = FrequencyFormatter.parseGroupedFrequencies(termMeta)
-        if (grouped.isEmpty()) return ""
+        val frequencies = FrequencyFormatter.parseFrequencies(termMeta)
+        if (frequencies.isEmpty()) return ""
 
         val dictionaries = state.value.dictionaries
-        val listItems = grouped.joinToString("") { freqData ->
+        val listItems = frequencies.joinToString("") { freqData ->
             val dictName = dictionaries.find { it.id == freqData.dictionaryId }?.title ?: ""
-            val entry = if (dictName.isNotBlank()) "$dictName: ${freqData.frequencies}" else freqData.frequencies
+            val entry = if (dictName.isNotBlank()) "$dictName: ${freqData.frequency}" else freqData.frequency
             "<li>$entry</li>"
         }
         return "<ul>$listItems</ul>"

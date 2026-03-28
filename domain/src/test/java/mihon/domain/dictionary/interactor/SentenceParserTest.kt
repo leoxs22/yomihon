@@ -36,6 +36,13 @@ class SentenceParserTest {
 
         // Default: return empty for any query
         coEvery { dictionaryRepository.searchTerms(any(), any()) } returns emptyList()
+        coEvery { dictionaryRepository.getDictionary(any()) } returns mihon.domain.dictionary.model.Dictionary(
+            id = 1L,
+            title = "Test",
+            revision = "1",
+            version = 1,
+            sourceLanguage = null,
+        )
 
         searchDictionaryTerms = SearchDictionaryTerms(dictionaryRepository)
     }
@@ -62,6 +69,32 @@ class SentenceParserTest {
         val word = searchDictionaryTerms.findFirstWord("taberutte itta yo", testDictionaryIds)
 
         word shouldBe "たべる"
+    }
+
+    @Test
+    fun `findFirstWordMatch returns full romaji source length`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("かつて", testDictionaryIds) } returns listOf(
+            mockTerm("かつて", "かつて", "v1"),
+        )
+
+        val match = searchDictionaryTerms.findFirstWordMatch("katsute ha kotoba desu ne", testDictionaryIds)
+
+        match.word shouldBe "かつて"
+        match.sourceOffset shouldBe 0
+        match.sourceLength shouldBe 7
+    }
+
+    @Test
+    fun `findFirstWordMatch tracks leading punctuation offset`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("たべる", testDictionaryIds) } returns listOf(
+            mockTerm("たべる", "たべる", "v1"),
+        )
+
+        val match = searchDictionaryTerms.findFirstWordMatch("「taberu」", testDictionaryIds)
+
+        match.word shouldBe "たべる"
+        match.sourceOffset shouldBe 1
+        match.sourceLength shouldBe 6
     }
 
     @Test
@@ -139,5 +172,117 @@ class SentenceParserTest {
         val word = searchDictionaryTerms.findFirstWord("わたしはです", testDictionaryIds)
 
         word shouldBe "わたし"
+    }
+
+    // Multilingual / script-detection tests
+
+    @Test
+    fun `searches English term by direct lookup`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("apple", testDictionaryIds) } returns listOf(
+            mockTerm("apple"),
+        )
+
+        val results = searchDictionaryTerms.search("apple", testDictionaryIds)
+
+        results.map { it.expression } shouldBe listOf("apple")
+    }
+
+    @Test
+    fun `searches romaji as Japanese fallback when no direct match`() = runTest {
+        // "taberu" has no direct English entry, but kana form "たべる" exists
+        coEvery { dictionaryRepository.searchTerms("たべる", testDictionaryIds) } returns listOf(
+            mockTerm("たべる", "たべる", "v1"),
+        )
+
+        val results = searchDictionaryTerms.search("taberu", testDictionaryIds)
+
+        results.map { it.expression } shouldBe listOf("たべる")
+    }
+
+    @Test
+    fun `finds English multi-word phrase as longest match`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("to be", testDictionaryIds) } returns listOf(
+            mockTerm("to be"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("to be or not to be", testDictionaryIds)
+
+        word shouldBe "to be"
+    }
+
+    @Test
+    fun `falls back to first English word when not in dictionary`() = runTest {
+        // No mock entries — nothing matches
+        val word = searchDictionaryTerms.findFirstWord("hello world", testDictionaryIds)
+
+        word shouldBe "hello"
+    }
+
+    @Test
+    fun `segments Chinese text by longest character match`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("你好", testDictionaryIds) } returns listOf(
+            mockTerm("你好"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("你好世界", testDictionaryIds)
+
+        word shouldBe "你好"
+    }
+
+    @Test
+    fun `segments Korean text by longest character match`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("안녕", testDictionaryIds) } returns listOf(
+            mockTerm("안녕"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("안녕하세요", testDictionaryIds)
+
+        word shouldBe "안녕"
+    }
+
+    @Test
+    fun `detects Japanese in mixed kanji kana text`() = runTest {
+        // "食べる" starts with CJK kanji but contains hiragana — must use Japanese pipeline
+        coEvery { dictionaryRepository.searchTerms("食べる", testDictionaryIds) } returns listOf(
+            mockTerm("食べる", "たべる", "v1"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("食べる世界", testDictionaryIds)
+
+        word shouldBe "食べる"
+    }
+
+    @Test
+    fun `preserves English apostrophes correctly`() = runTest {
+        coEvery { dictionaryRepository.getDictionary(1L) } returns mihon.domain.dictionary.model.Dictionary(
+            title = "Test",
+            revision = "1",
+            version = 1,
+            sourceLanguage = "en",
+        )
+        coEvery { dictionaryRepository.searchTerms("don't", testDictionaryIds) } returns listOf(
+            mockTerm("don't"),
+        )
+
+        val match = searchDictionaryTerms.findFirstWordMatch("don't do that", testDictionaryIds)
+        match.word shouldBe "don't"
+        match.sourceLength shouldBe 5
+    }
+
+    @Test
+    fun `segments kanji-only Japanese correctly when restricted`() = runTest {
+        coEvery { dictionaryRepository.getDictionary(1L) } returns mihon.domain.dictionary.model.Dictionary(
+            title = "Test",
+            revision = "1",
+            version = 1,
+            sourceLanguage = "ja",
+        )
+        coEvery { dictionaryRepository.searchTerms("世界", testDictionaryIds) } returns listOf(
+            mockTerm("世界", "せかい", "n"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("世界", testDictionaryIds)
+
+        word shouldBe "世界"
     }
 }

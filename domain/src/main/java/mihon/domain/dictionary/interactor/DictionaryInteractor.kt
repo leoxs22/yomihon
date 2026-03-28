@@ -10,6 +10,10 @@ class DictionaryInteractor(
         return dictionaryRepository.getAllDictionaries()
     }
 
+    suspend fun getFreqDictionaryIds(): List<Long> {
+        return dictionaryRepository.getFreqDictionaryIds()
+    }
+
     suspend fun getDictionary(dictionaryId: Long): Dictionary? {
         return dictionaryRepository.getDictionary(dictionaryId)
     }

@@ -601,6 +601,13 @@ private fun DictionaryItem(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (!dictionary.sourceLanguage.isNullOrBlank() || !dictionary.targetLanguage.isNullOrBlank()) {
+                        Text(
+                            text = "${dictionary.sourceLanguage ?: "?"} -> ${dictionary.targetLanguage ?: "?"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         text = "${stringResource(MR.strings.label_date)} ${formatDate(dictionary.dateAdded)}",
                         style = MaterialTheme.typography.bodySmall,

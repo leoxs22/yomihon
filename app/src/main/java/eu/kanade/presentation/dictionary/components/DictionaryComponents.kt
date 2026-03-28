@@ -120,19 +120,18 @@ fun DictionaryResults(
         searchResults.isEmpty() && hasSearched -> {
             Column(
                 modifier = modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (query.isNotBlank()) {
                     WordSelector(
                         text = query,
                         highlightRange = null,
                         onSearch = { onSearch(it) },
+                        modifier = Modifier.padding(contentPadding),
                     )
                 }
                 EmptyScreen(
                     stringRes = MR.strings.no_results_found,
-                    modifier = modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -458,6 +457,7 @@ private fun WordSelector(
     text: String,
     highlightRange: Pair<Int, Int>? = null,
     onSearch: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // OCR text header - clickable to search from any character
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -495,7 +495,7 @@ private fun WordSelector(
             fontWeight = FontWeight.Normal,
         ),
         onTextLayout = { layout = it },
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .pointerInput(text) {

@@ -8,6 +8,8 @@ CREATE TABLE dictionaries (
     description TEXT,
     attribution TEXT,
     styles TEXT,
+    source_language TEXT,
+    target_language TEXT,
     is_enabled INTEGER NOT NULL DEFAULT 1, -- 1 for true, 0 for false
     priority INTEGER NOT NULL DEFAULT 0,
     date_added INTEGER NOT NULL,
@@ -107,12 +109,27 @@ SELECT *
 FROM dictionaries
 ORDER BY priority ASC, title ASC;
 
+getFreqDictionaryIds:
+SELECT _id
+FROM dictionaries
+WHERE is_enabled = 1
+  AND (
+    SELECT COUNT(*) 
+    FROM (
+      SELECT 1 
+      FROM dictionary_term_meta 
+      WHERE dictionary_term_meta.dictionary_id = dictionaries._id 
+        AND dictionary_term_meta.mode = 'freq' 
+      LIMIT 5
+    )
+  ) = 5;
+
 selectLastInsertedRowId:
 SELECT last_insert_rowid();
 
 insertDictionary:
-INSERT INTO dictionaries(title, revision, version, author, url, description, attribution, styles, is_enabled, priority, date_added)
-VALUES (:title, :revision, :version, :author, :url, :description, :attribution, :styles, :is_enabled, :priority, :date_added);
+INSERT INTO dictionaries(title, revision, version, author, url, description, attribution, styles, source_language, target_language, is_enabled, priority, date_added)
+VALUES (:title, :revision, :version, :author, :url, :description, :attribution, :styles, :source_language, :target_language, :is_enabled, :priority, :date_added);
 
 updateDictionary:
 UPDATE dictionaries
@@ -124,6 +141,8 @@ SET title = :title,
     description = :description,
     attribution = :attribution,
     styles = :styles,
+    source_language = :source_language,
+    target_language = :target_language,
     is_enabled = :is_enabled,
     priority = :priority
 WHERE _id = :id;

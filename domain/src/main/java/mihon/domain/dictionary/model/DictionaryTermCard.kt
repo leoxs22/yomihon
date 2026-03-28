@@ -11,19 +11,28 @@ data class DictionaryTermCard(
     val pitchAccent: String = "",
     val frequency: String = "",
     val pictureUrl: String = "",
+    val freqAvgValue: String = "",
+    val freqLowestValue: String = "",
+    val singleFreqValues: Map<Long, String> = emptyMap(),
     val tags: Set<String> = emptySet(),
 ) {
     /**
      * Get the value for a given app field name.
      */
-    fun getFieldValue(fieldName: String): String = when (fieldName) {
-        "expression" -> expression
-        "reading" -> reading
-        "glossary" -> glossary
-        "sentence" -> sentence
-        "pitchAccent" -> pitchAccent
-        "frequency" -> frequency
-        "picture" -> pictureUrl
+    fun getFieldValue(fieldName: String): String = when {
+        fieldName == "expression" -> expression
+        fieldName == "reading" -> reading
+        fieldName == "glossary" -> glossary
+        fieldName == "sentence" -> sentence
+        fieldName == "pitchAccent" -> pitchAccent
+        fieldName == "frequency" -> frequency
+        fieldName == "picture" -> pictureUrl
+        fieldName == "freqAvgValue" -> freqAvgValue
+        fieldName == "freqLowestValue" -> freqLowestValue
+        fieldName.startsWith("freqSingleValue_") -> {
+            val dictId = fieldName.substringAfter("freqSingleValue_").toLongOrNull()
+            singleFreqValues[dictId] ?: ""
+        }
         else -> ""
     }
 }
@@ -35,6 +44,9 @@ fun DictionaryTerm.toDictionaryTermCard(
     pitchAccent: String = "",
     frequency: String = "",
     pictureUrl: String = "",
+    freqAvgValue: String = "",
+    freqLowestValue: String = "",
+    singleFreqValues: Map<Long, String> = emptyMap(),
 ): DictionaryTermCard {
     val cardTags = buildSet {
         add("yomihon")
@@ -52,6 +64,9 @@ fun DictionaryTerm.toDictionaryTermCard(
         pitchAccent = pitchAccent,
         frequency = frequency,
         pictureUrl = pictureUrl,
+        freqAvgValue = freqAvgValue,
+        freqLowestValue = freqLowestValue,
+        singleFreqValues = singleFreqValues,
         tags = cardTags,
     )
 }

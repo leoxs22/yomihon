@@ -271,7 +271,8 @@ internal object PitchAccentFormatter {
 
     /**
      * Generate an SVG representation of a pitch accent pattern.
-     * Matches the visual style of the PitchAccentGraph composable but colors are altered for Anki (dark background)
+     * Matches the visual style of the PitchAccentGraph composable.
+     * Uses CSS media queries to support both light and dark Anki themes.
      */
     private fun PitchPattern.toSvg(): String {
         if (morae.isEmpty()) return ""
@@ -294,6 +295,28 @@ internal object PitchAccentFormatter {
         sb.append("width=\"$totalWidth\" height=\"$totalHeight\" ")
         sb.append("viewBox=\"0 0 $totalWidth $totalHeight\">")
 
+        // CSS for light/dark mode compatibility
+        sb.append(
+            """<style>
+.pa-line{stroke:#000000}
+.pa-particle{stroke:#000000;opacity:0.5}
+.pa-dot{fill:#000000}
+.pa-nasal{fill:none;stroke:#000000}
+.pa-devoiced{stroke:#666666}
+.pa-text{fill:#000000}
+.pa-text-devoiced{fill:#666666}
+@media(prefers-color-scheme:dark){
+.pa-line{stroke:#FFFFFF}
+.pa-particle{stroke:#FFFFFF;opacity:0.5}
+.pa-dot{fill:#FFFFFF}
+.pa-nasal{fill:none;stroke:#FFFFFF}
+.pa-devoiced{stroke:#AAAAAA}
+.pa-text{fill:#FFFFFF}
+.pa-text-devoiced{fill:#AAAAAA}
+}
+</style>""",
+        )
+
         // Draw connecting lines
         for (i in 0 until morae.size - 1) {
             val x1 = moraWidth * i + moraWidth / 2
@@ -301,7 +324,7 @@ internal object PitchAccentFormatter {
             val x2 = moraWidth * (i + 1) + moraWidth / 2
             val y2 = if (morae[i + 1].pitch == PitchLevel.HIGH) highY else lowY
             sb.append("<line x1=\"$x1\" y1=\"$y1\" x2=\"$x2\" y2=\"$y2\" ")
-            sb.append("stroke=\"#FFFFFF\" stroke-width=\"$strokeWidth\" stroke-linecap=\"round\"/>")
+            sb.append("class=\"pa-line\" stroke-width=\"$strokeWidth\" stroke-linecap=\"round\"/>")
         }
 
         // Draw particle indicator (dashed line after last mora)
@@ -311,8 +334,8 @@ internal object PitchAccentFormatter {
             val lastY = if (lastMora.pitch == PitchLevel.HIGH) highY else lowY
             val particleY = if (particlePitch == PitchLevel.HIGH) highY else lowY
             sb.append("<line x1=\"$lastX\" y1=\"$lastY\" x2=\"${lastX + moraWidth / 2}\" y2=\"$particleY\" ")
-            sb.append("stroke=\"#FFFFFF\" stroke-width=\"$strokeWidth\" stroke-dasharray=\"4 4\" ")
-            sb.append("stroke-linecap=\"round\" opacity=\"0.5\"/>")
+            sb.append("class=\"pa-particle\" stroke-width=\"$strokeWidth\" stroke-dasharray=\"4 4\" ")
+            sb.append("stroke-linecap=\"round\"/>")
         }
 
         // Draw dots/shapes
@@ -324,19 +347,19 @@ internal object PitchAccentFormatter {
                 // Nasal: Hollow circle
                 moraPitch.isNasal -> {
                     sb.append("<circle cx=\"$cx\" cy=\"$cy\" r=\"${dotRadius}\" ")
-                    sb.append("fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"1.5\"/>")
+                    sb.append("class=\"pa-nasal\" stroke-width=\"1.5\"/>")
                 }
                 // Devoiced: 'X' mark
                 moraPitch.isDevoiced -> {
                     val r = dotRadius
                     sb.append("<line x1=\"${cx - r}\" y1=\"${cy - r}\" x2=\"${cx + r}\" y2=\"${cy + r}\" ")
-                    sb.append("stroke=\"#AAAAAA\" stroke-width=\"1.5\"/>")
+                    sb.append("class=\"pa-devoiced\" stroke-width=\"1.5\"/>")
                     sb.append("<line x1=\"${cx + r}\" y1=\"${cy - r}\" x2=\"${cx - r}\" y2=\"${cy + r}\" ")
-                    sb.append("stroke=\"#AAAAAA\" stroke-width=\"1.5\"/>")
+                    sb.append("class=\"pa-devoiced\" stroke-width=\"1.5\"/>")
                 }
                 // Standard: Filled circle
                 else -> {
-                    sb.append("<circle cx=\"$cx\" cy=\"$cy\" r=\"$dotRadius\" fill=\"#FFFFFF\"/>")
+                    sb.append("<circle cx=\"$cx\" cy=\"$cy\" r=\"$dotRadius\" class=\"pa-dot\"/>")
                 }
             }
         }
@@ -345,13 +368,9 @@ internal object PitchAccentFormatter {
         morae.forEachIndexed { index, moraPitch ->
             val x = moraWidth * index + moraWidth / 2
             val textY = graphHeight + textHeight - 2
-            val color = when {
-                moraPitch.isDevoiced -> "#AAAAAA" // Gray for devoiced
-                moraPitch.isNasal -> "#FFFFFF" // White for nasal (same as standard)
-                else -> "#FFFFFF" // White for standard
-            }
+            val textClass = if (moraPitch.isDevoiced) "pa-text-devoiced" else "pa-text"
             sb.append("<text x=\"$x\" y=\"$textY\" text-anchor=\"middle\" ")
-            sb.append("font-size=\"10\" font-family=\"sans-serif\" fill=\"$color\">")
+            sb.append("font-size=\"10\" font-family=\"sans-serif\" class=\"$textClass\">")
             sb.append(moraPitch.mora)
             sb.append("</text>")
         }

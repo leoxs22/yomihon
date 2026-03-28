@@ -10,7 +10,6 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.TimeZone
 import kotlin.random.Random
 
 /**
@@ -70,15 +69,15 @@ internal class GlensOcrEngine : OcrEngine {
 
     private fun buildRequestPayload(image: PreparedImage): ByteArray {
         val requestId = Random.nextLong()
-        val timeZone = TimeZone.getDefault().id.ifBlank { DEFAULT_CLIENT_TIME_ZONE }
 
         return ProtoWriter().apply {
             writeMessage(fieldNumber = SERVER_REQUEST_OBJECTS_REQUEST) { objectsRequest ->
                 objectsRequest.writeMessage(fieldNumber = OBJECTS_REQUEST_CONTEXT) { requestContext ->
                     requestContext.writeMessage(fieldNumber = REQUEST_CONTEXT_REQUEST_ID) { requestIdMessage ->
                         requestIdMessage.writeUInt64(fieldNumber = REQUEST_ID_UUID, value = requestId)
-                        requestIdMessage.writeInt32(fieldNumber = REQUEST_ID_SEQUENCE_ID, value = 1)
-                        requestIdMessage.writeInt32(fieldNumber = REQUEST_ID_IMAGE_SEQUENCE_ID, value = 1)
+                        requestIdMessage.writeInt32(fieldNumber = REQUEST_ID_SEQUENCE_ID, value = 0)
+                        requestIdMessage.writeInt32(fieldNumber = REQUEST_ID_IMAGE_SEQUENCE_ID, value = 0)
+                        requestIdMessage.writeBytes(fieldNumber = REQUEST_ID_ANALYTICS_ID, value = Random.nextBytes(16))
                     }
                     requestContext.writeMessage(fieldNumber = REQUEST_CONTEXT_CLIENT_CONTEXT) { clientContext ->
                         clientContext.writeInt32(fieldNumber = CLIENT_CONTEXT_PLATFORM, value = PLATFORM_WEB)
@@ -86,7 +85,11 @@ internal class GlensOcrEngine : OcrEngine {
                         clientContext.writeMessage(fieldNumber = CLIENT_CONTEXT_LOCALE_CONTEXT) { localeContext ->
                             localeContext.writeString(fieldNumber = LOCALE_LANGUAGE, value = DEFAULT_CLIENT_LANGUAGE)
                             localeContext.writeString(fieldNumber = LOCALE_REGION, value = DEFAULT_CLIENT_REGION)
-                            localeContext.writeString(fieldNumber = LOCALE_TIME_ZONE, value = timeZone)
+                        }
+                        clientContext.writeMessage(fieldNumber = CLIENT_CONTEXT_CLIENT_FILTERS) { clientFilters ->
+                            clientFilters.writeMessage(fieldNumber = CLIENT_FILTERS_FILTER) { filter ->
+                                filter.writeInt32(fieldNumber = FILTER_FILTER_TYPE, value = AUTO_FILTER)
+                            }
                         }
                     }
                 }
@@ -114,6 +117,8 @@ internal class GlensOcrEngine : OcrEngine {
             setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
             setRequestProperty("X-Goog-Api-Key", API_KEY)
             setRequestProperty("Connection", "keep-alive")
+            setRequestProperty("Sec-Fetch-Mode", "no-cors")
+            setRequestProperty("Sec-Fetch-Dest", "empty")
         }
 
         return try {
@@ -159,7 +164,7 @@ internal class GlensOcrEngine : OcrEngine {
             .map(String::trim)
             .filter(String::isNotEmpty)
             // collapse into a single line for viewing and format consistency between engines
-            .joinToString(separator = "")
+            .joinToString(separator = " ")
     }
 
     private fun parseObjectsResponse(objectsBytes: ByteArray): List<String> {
@@ -204,7 +209,7 @@ internal class GlensOcrEngine : OcrEngine {
 
     private fun parseTextLayout(layoutBytes: ByteArray): List<String> {
         val reader = ProtoReader(layoutBytes)
-        val paragraphs = mutableListOf<String>()
+        val allLines = mutableListOf<ParsedLine>()
 
         while (reader.hasRemaining()) {
             val tag = reader.readTag()
@@ -213,21 +218,36 @@ internal class GlensOcrEngine : OcrEngine {
             val field = tag ushr 3
             val wireType = tag and WIRE_TYPE_MASK
             if (field == TEXT_LAYOUT_PARAGRAPH && wireType == WIRE_TYPE_LENGTH_DELIMITED) {
-                val paragraphText = parseParagraph(reader.readBytes())
-                if (paragraphText.isNotBlank()) {
-                    paragraphs += paragraphText
-                }
+                allLines += collectParagraphLines(reader.readBytes())
             } else {
                 reader.skipField(wireType)
             }
         }
 
-        return paragraphs
+        if (allLines.isEmpty()) return emptyList()
+
+        val verticalLines = allLines.filter { it.isVertical }
+        val horizontalLines = allLines.filter { !it.isVertical }
+
+        val filteredVertical = filterRuby(
+            verticalLines.sortedByDescending { it.centerX + it.width / 2f },
+            isVertical = true,
+        )
+
+        val filteredHorizontal = filterRuby(
+            horizontalLines.sortedBy { it.centerY },
+            isVertical = false,
+        )
+
+        return (filteredVertical + filteredHorizontal)
+            .map { it.text }
+            .filter { it.isNotBlank() }
     }
 
-    private fun parseParagraph(paragraphBytes: ByteArray): String {
+    /** Parses one paragraph proto, returning its [ParsedLine] objects without filtering. */
+    private fun collectParagraphLines(paragraphBytes: ByteArray): List<ParsedLine> {
         val reader = ProtoReader(paragraphBytes)
-        val lines = mutableListOf<String>()
+        val lines = mutableListOf<ParsedLine>()
 
         while (reader.hasRemaining()) {
             val tag = reader.readTag()
@@ -236,21 +256,21 @@ internal class GlensOcrEngine : OcrEngine {
             val field = tag ushr 3
             val wireType = tag and WIRE_TYPE_MASK
             if (field == PARAGRAPH_LINE && wireType == WIRE_TYPE_LENGTH_DELIMITED) {
-                val lineText = parseLine(reader.readBytes())
-                if (lineText.isNotBlank()) {
-                    lines += lineText
+                val parsedLine = parseLine(reader.readBytes())
+                if (parsedLine.text.isNotBlank()) {
+                    lines += parsedLine
                 }
             } else {
                 reader.skipField(wireType)
             }
         }
 
-        return lines.joinToString(separator = "\n")
+        return lines
     }
 
-    private fun parseLine(lineBytes: ByteArray): String {
+    private fun parseLine(lineBytes: ByteArray): ParsedLine {
         val reader = ProtoReader(lineBytes)
-        val builder = StringBuilder()
+        val words = mutableListOf<ParsedWord>()
 
         while (reader.hasRemaining()) {
             val tag = reader.readTag()
@@ -259,19 +279,171 @@ internal class GlensOcrEngine : OcrEngine {
             val field = tag ushr 3
             val wireType = tag and WIRE_TYPE_MASK
             if (field == LINE_WORD && wireType == WIRE_TYPE_LENGTH_DELIMITED) {
-                builder.append(parseWord(reader.readBytes()))
+                words += parseWord(reader.readBytes())
             } else {
                 reader.skipField(wireType)
             }
         }
 
-        return builder.toString().trim()
+        val plainText = words.joinToString("") { it.text }
+        val text = words.joinToString(separator = "") { w -> w.text + w.separator }.trim()
+
+        val isVertical = isVerticalLine(words)
+
+        val positioned = words.filter { it.centerX > 0f || it.centerY > 0f }
+        var centerX = 0f
+        var centerY = 0f
+        var width = 0f
+        var height = 0f
+
+        if (positioned.isNotEmpty()) {
+            val minX = positioned.minOf { it.centerX - it.width / 2f }
+            val maxX = positioned.maxOf { it.centerX + it.width / 2f }
+            val minY = positioned.minOf { it.centerY - it.height / 2f }
+            val maxY = positioned.maxOf { it.centerY + it.height / 2f }
+            width = maxX - minX
+            height = maxY - minY
+            centerX = minX + width / 2f
+            centerY = minY + height / 2f
+        }
+
+        val sizes = words.mapNotNull { w ->
+            val s = if (isVertical) w.width else w.height
+            s.takeIf { it > 0f }
+        }.sorted()
+        val characterSize = if (sizes.isNotEmpty()) sizes[sizes.size / 2] else 0f
+
+        return ParsedLine(
+            words = words,
+            text = text,
+            hasJpText = containsJapanese(plainText),
+            hasKanji = containsKanji(plainText),
+            isVertical = isVertical,
+            centerX = centerX,
+            centerY = centerY,
+            width = width,
+            height = height,
+            characterSize = characterSize,
+        )
     }
 
-    private fun parseWord(wordBytes: ByteArray): String {
+    private fun compute1DIntersection(minA: Float, maxA: Float, minB: Float, maxB: Float): Float {
+        val overlapStart = maxOf(minA, minB)
+        val overlapEnd = minOf(maxA, maxB)
+        return maxOf(0f, overlapEnd - overlapStart)
+    }
+
+    private fun horizontalOverlapRatio(boxA: ParsedLine, boxB: ParsedLine): Float {
+        val intersect = compute1DIntersection(
+            boxA.centerX - boxA.width / 2f,
+            boxA.centerX + boxA.width / 2f,
+            boxB.centerX - boxB.width / 2f,
+            boxB.centerX + boxB.width / 2f,
+        )
+        val smallestWidth = minOf(boxA.width, boxB.width)
+        return if (smallestWidth > 0f) intersect / smallestWidth else 0f
+    }
+
+    private fun verticalOverlapRatio(boxA: ParsedLine, boxB: ParsedLine): Float {
+        val intersect = compute1DIntersection(
+            boxA.centerY - boxA.height / 2f,
+            boxA.centerY + boxA.height / 2f,
+            boxB.centerY - boxB.height / 2f,
+            boxB.centerY + boxB.height / 2f,
+        )
+        val smallestHeight = minOf(boxA.height, boxB.height)
+        return if (smallestHeight > 0f) intersect / smallestHeight else 0f
+    }
+
+    private fun filterRuby(lines: List<ParsedLine>, isVertical: Boolean): List<ParsedLine> {
+        if (lines.none { it.hasJpText }) return lines
+
+        val results = mutableListOf<ParsedLine>()
+        var index = 0
+
+        while (index < lines.size) {
+            val current = lines[index]
+            val next = lines.getOrNull(index + 1)
+
+            if (next == null || !current.hasJpText || !next.hasJpText || current.hasKanji || !next.hasKanji) {
+                results.add(current)
+                index++
+                continue
+            }
+
+            // At this point: current has no kanji and next has kanji.
+            // current is the ruby (furigana) candidate; next is the kanji base.
+            val ruby = current
+
+            val isValidAlignment = if (isVertical) {
+                val distH = ruby.centerX - next.centerX
+                val minH = kotlin.math.abs(next.width - ruby.width) / 2f
+                val maxH = next.width + (ruby.width / 2f)
+                val overlapV = verticalOverlapRatio(ruby, next)
+                distH > minH && distH < maxH && overlapV > 0.4f
+            } else {
+                val distV = next.centerY - ruby.centerY
+                val minV = kotlin.math.abs(next.height - ruby.height) / 2f
+                val maxV = next.height + (ruby.height / 2f)
+                val overlapH = horizontalOverlapRatio(ruby, next)
+                distV > minV && distV < maxV && overlapH > 0.4f
+            }
+
+            val baseSize = if (isVertical) next.characterSize else next.height
+            val rubySize = if (isVertical) ruby.characterSize else ruby.height
+            val isRubySized = baseSize > 0f && rubySize < baseSize * 0.85f
+
+            if (isValidAlignment && isRubySized) {
+                results.add(next)
+                index += 2
+            } else {
+                results.add(current)
+                index++
+            }
+        }
+        return results
+    }
+
+    private fun isVerticalLine(words: List<ParsedWord>): Boolean {
+        val positioned = words.filter { it.centerX > 0f || it.centerY > 0f }
+        if (positioned.size >= 2) {
+            val xRange = positioned.maxOf { it.centerX } - positioned.minOf { it.centerX }
+            val yRange = positioned.maxOf { it.centerY } - positioned.minOf { it.centerY }
+            return yRange > xRange
+        }
+        // Fallback: compare median word dimensions.
+        val heights = words.mapNotNull { it.height.takeIf { h -> h > 0f } }.sorted()
+        val widths = words.mapNotNull { it.width.takeIf { w -> w > 0f } }.sorted()
+        if (heights.isEmpty() || widths.isEmpty()) return false
+        val medH = heights[heights.size / 2]
+        val medW = widths[widths.size / 2]
+        return medH > medW
+    }
+
+    // Simple heuristic, doesn't need to be perfect due to other filtering restrictions
+    private fun containsJapanese(text: String): Boolean = text.any { c ->
+        val cp = c.code
+        cp in 0x3040..0x30FF || // Hiragana + Katakana
+            cp in 0x4E00..0x9FFF || // CJK Unified Ideographs (common kanji)
+            cp in 0x3400..0x4DBF || // CJK Extension A
+            cp in 0xF900..0xFAFF // CJK Compatibility Ideographs
+    }
+
+    private fun containsKanji(text: String): Boolean = text.any { c ->
+        val cp = c.code
+        cp in 0x4E00..0x9FFF || // CJK Unified Ideographs (common kanji)
+            cp in 0x3400..0x4DBF || // CJK Extension A
+            cp in 0xF900..0xFAFF // CJK Compatibility Ideographs
+    }
+
+    private fun parseWord(wordBytes: ByteArray): ParsedWord {
         val reader = ProtoReader(wordBytes)
         var text = ""
         var separator = ""
+        var centerX = 0f
+        var centerY = 0f
+        var width = 0f
+        var height = 0f
 
         while (reader.hasRemaining()) {
             val tag = reader.readTag()
@@ -286,12 +458,105 @@ internal class GlensOcrEngine : OcrEngine {
                 WORD_SEPARATOR if wireType == WIRE_TYPE_LENGTH_DELIMITED -> {
                     separator = reader.readString()
                 }
+                WORD_GEOMETRY if wireType == WIRE_TYPE_LENGTH_DELIMITED -> {
+                    val box = parseGeometryBox(reader.readBytes())
+                    centerX = box.centerX
+                    centerY = box.centerY
+                    width = box.width
+                    height = box.height
+                }
                 else -> reader.skipField(wireType)
             }
         }
 
-        return text + separator
+        return ParsedWord(
+            text = text,
+            separator = separator,
+            centerX = centerX,
+            centerY = centerY,
+            width = width,
+            height = height,
+        )
     }
+
+    private data class BoundingBoxData(
+        val centerX: Float,
+        val centerY: Float,
+        val width: Float,
+        val height: Float,
+    )
+
+    private fun parseGeometryBox(geometryBytes: ByteArray): BoundingBoxData {
+        val reader = ProtoReader(geometryBytes)
+        var box = BoundingBoxData(0f, 0f, 0f, 0f)
+
+        while (reader.hasRemaining()) {
+            val tag = reader.readTag()
+            if (tag == 0) break
+
+            val field = tag ushr 3
+            val wireType = tag and WIRE_TYPE_MASK
+            if (field == GEOMETRY_BOUNDING_BOX && wireType == WIRE_TYPE_LENGTH_DELIMITED) {
+                box = parseBoundingBox(reader.readBytes())
+            } else {
+                reader.skipField(wireType)
+            }
+        }
+
+        return box
+    }
+
+    private fun parseBoundingBox(bboxBytes: ByteArray): BoundingBoxData {
+        val reader = ProtoReader(bboxBytes)
+        var centerX = 0f
+        var centerY = 0f
+        var width = 0f
+        var height = 0f
+
+        while (reader.hasRemaining()) {
+            val tag = reader.readTag()
+            if (tag == 0) break
+
+            val field = tag ushr 3
+            val wireType = tag and WIRE_TYPE_MASK
+            when (field) {
+                BOUNDING_BOX_CENTER_X if wireType == WIRE_TYPE_32BIT -> centerX = reader.readFloat()
+                BOUNDING_BOX_CENTER_Y if wireType == WIRE_TYPE_32BIT -> centerY = reader.readFloat()
+                BOUNDING_BOX_WIDTH if wireType == WIRE_TYPE_32BIT -> width = reader.readFloat()
+                BOUNDING_BOX_HEIGHT if wireType == WIRE_TYPE_32BIT -> height = reader.readFloat()
+                else -> reader.skipField(wireType)
+            }
+        }
+
+        return BoundingBoxData(centerX = centerX, centerY = centerY, width = width, height = height)
+    }
+
+    /**
+     * Intermediate representation of a parsed word used during furigana filtering.
+     * Discarded after [parseLine] assembles the final string.
+     * Coords are normalized to [0, 1] domain.
+     */
+    private data class ParsedWord(
+        val text: String,
+        val separator: String,
+        val centerX: Float,
+        val centerY: Float,
+        val width: Float,
+        val height: Float,
+    )
+
+    private data class ParsedLine(
+        val words: List<ParsedWord>,
+        val text: String,
+        val hasJpText: Boolean,
+        val hasKanji: Boolean,
+        val isVertical: Boolean,
+        val centerX: Float,
+        val centerY: Float,
+        val width: Float,
+        val height: Float,
+        val characterSize: Float,
+    )
 
     private data class PreparedImage(
         val bytes: ByteArray,
@@ -324,10 +589,9 @@ internal class GlensOcrEngine : OcrEngine {
         private const val CONTENT_TYPE_PROTOBUF = "application/x-protobuf"
         private const val API_KEY = "AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY"
         private const val DEFAULT_USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
-        private const val DEFAULT_CLIENT_LANGUAGE = "en"
-        private const val DEFAULT_CLIENT_REGION = "US"
-        private const val DEFAULT_CLIENT_TIME_ZONE = "America/New_York"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        private const val DEFAULT_CLIENT_LANGUAGE = "ja"
+        private const val DEFAULT_CLIENT_REGION = "Asia/Tokyo"
         private const val MAX_IMAGE_DIMENSION = 1500
 
         private const val CONNECT_TIMEOUT_MS = 10_000
@@ -335,6 +599,7 @@ internal class GlensOcrEngine : OcrEngine {
 
         private const val WIRE_TYPE_MASK = 0x7
         private const val WIRE_TYPE_LENGTH_DELIMITED = 2
+        private const val WIRE_TYPE_32BIT = 5
 
         // Request fields
         private const val SERVER_REQUEST_OBJECTS_REQUEST = 1
@@ -345,12 +610,16 @@ internal class GlensOcrEngine : OcrEngine {
         private const val REQUEST_ID_UUID = 1
         private const val REQUEST_ID_SEQUENCE_ID = 2
         private const val REQUEST_ID_IMAGE_SEQUENCE_ID = 3
+        private const val REQUEST_ID_ANALYTICS_ID = 4
         private const val CLIENT_CONTEXT_PLATFORM = 1
         private const val CLIENT_CONTEXT_SURFACE = 2
         private const val CLIENT_CONTEXT_LOCALE_CONTEXT = 4
+        private const val CLIENT_CONTEXT_CLIENT_FILTERS = 7
+        private const val CLIENT_FILTERS_FILTER = 1
+        private const val FILTER_FILTER_TYPE = 1
+        private const val AUTO_FILTER = 1
         private const val LOCALE_LANGUAGE = 1
         private const val LOCALE_REGION = 2
-        private const val LOCALE_TIME_ZONE = 3
         private const val IMAGE_DATA_PAYLOAD = 1
         private const val IMAGE_DATA_METADATA = 3
         private const val IMAGE_PAYLOAD_BYTES = 1
@@ -359,7 +628,7 @@ internal class GlensOcrEngine : OcrEngine {
         private const val PLATFORM_WEB = 3
         private const val SURFACE_CHROMIUM = 4
 
-        // Response fields
+        // Response fields — text layout hierarchy
         private const val SERVER_RESPONSE_OBJECTS_RESPONSE = 2
         private const val OBJECTS_RESPONSE_TEXT = 3
         private const val TEXT_LAYOUT = 1
@@ -368,6 +637,14 @@ internal class GlensOcrEngine : OcrEngine {
         private const val LINE_WORD = 1
         private const val WORD_PLAIN_TEXT = 2
         private const val WORD_SEPARATOR = 3
+
+        // Response fields — geometry
+        private const val WORD_GEOMETRY = 4
+        private const val GEOMETRY_BOUNDING_BOX = 1
+        private const val BOUNDING_BOX_CENTER_X = 1
+        private const val BOUNDING_BOX_CENTER_Y = 2
+        private const val BOUNDING_BOX_WIDTH = 3
+        private const val BOUNDING_BOX_HEIGHT = 4
     }
 }
 
@@ -449,6 +726,22 @@ private class ProtoReader(
         return value
     }
 
+    /**
+     * Read a 32-bit little-endian IEEE 754 float (protobuf wire type 5).
+     * The caller must consume the tag first and verify wireType == [WIRE_TYPE_32BIT].
+     */
+    fun readFloat(): Float {
+        if (position + 4 > bytes.size) {
+            throw IOException("Unexpected end of protobuf while reading float")
+        }
+        val bits = (bytes[position ].toInt() and 0xFF) or
+            ((bytes[position + 1].toInt() and 0xFF) shl 8) or
+            ((bytes[position + 2].toInt() and 0xFF) shl 16) or
+            ((bytes[position + 3].toInt() and 0xFF) shl 24)
+        position += 4
+        return java.lang.Float.intBitsToFloat(bits)
+    }
+
     fun skipField(wireType: Int) {
         when (wireType) {
             0 -> readVarint64()
@@ -457,7 +750,6 @@ private class ProtoReader(
                 val length = readVarint32()
                 skipBytes(length)
             }
-
             5 -> skipBytes(4)
             else -> throw IOException("Unsupported protobuf wire type: $wireType")
         }
