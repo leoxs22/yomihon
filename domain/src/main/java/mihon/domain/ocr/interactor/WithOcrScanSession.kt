@@ -2,10 +2,10 @@ package mihon.domain.ocr.interactor
 
 import mihon.domain.ocr.repository.OcrRepository
 
-class RunOcrScanSession(
+class WithOcrScanSession(
     private val ocrRepository: OcrRepository,
 ) {
-    suspend fun <T> await(block: suspend () -> T): T {
+    suspend fun <T> run(block: suspend () -> T): T {
         return ocrRepository.withScanSession(block)
     }
 }

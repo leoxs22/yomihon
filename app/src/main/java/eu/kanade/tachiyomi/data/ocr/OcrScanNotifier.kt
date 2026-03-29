@@ -77,23 +77,31 @@ internal class OcrScanNotifier(
     }
 
     fun onError(
-        mangaId: Long?,
-        mangaTitle: String?,
-        chapterName: String,
-        error: String?,
-    ) {
+        error: OcrChapterScanError,
+    ): String {
+        val message = error.failure.toMessage()
         with(errorNotificationBuilder) {
             setSmallIcon(R.drawable.ic_warning_white_24dp)
-            setContentTitle(context.stringResource(MR.strings.ocr_preprocess_failed, chapterName))
-            setContentText(error ?: context.stringResource(MR.strings.download_notifier_unknown_error))
-            setSubText(mangaTitle)
+            setContentTitle(context.stringResource(MR.strings.ocr_preprocess_failed, error.chapterName))
+            setContentText(message)
+            setSubText(error.mangaTitle)
             setProgress(0, 0, false)
-            mangaId?.let { setContentIntent(NotificationReceiver.openEntryPendingActivity(context, it)) }
+            error.mangaId?.let { setContentIntent(NotificationReceiver.openEntryPendingActivity(context, it)) }
             show(Notifications.ID_OCR_ERROR)
         }
+        return message
     }
 
     fun dismissProgress() {
         context.cancelNotification(Notifications.ID_OCR_PROGRESS)
+    }
+
+    private fun OcrScanFailure.toMessage(): String {
+        return when (this) {
+            OcrScanFailure.ChapterNotFound -> context.stringResource(MR.strings.chapter_not_found)
+            OcrScanFailure.MangaNotFound -> context.stringResource(MR.strings.ocr_scan_manga_not_found)
+            OcrScanFailure.NoPages -> context.stringResource(MR.strings.page_list_empty_error)
+            is OcrScanFailure.Unexpected -> message ?: context.stringResource(MR.strings.download_notifier_unknown_error)
+        }
     }
 }

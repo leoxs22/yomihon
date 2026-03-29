@@ -1180,6 +1180,7 @@
     <string name="ocr_preprocess_progress">%1$s - %2$d/%3$d pages scanned</string>
     <string name="ocr_preprocess_completed">%1$s scanned</string>
     <string name="ocr_preprocess_failed">%1$s could not be scanned</string>
+    <string name="ocr_scan_manga_not_found">Manga not found</string>
     <string name="error_unknown">Unknown OCR Error Occurred</string>
     <string name="ocr_memory_error">Not Enough Memory to Run OCR</string>
     <string name="ocr_initialization_error">OCR Initialization Failed</string>

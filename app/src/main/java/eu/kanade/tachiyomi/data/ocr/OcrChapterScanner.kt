@@ -1,12 +1,11 @@
 package eu.kanade.tachiyomi.data.ocr
 
-import android.graphics.Bitmap
+import eu.kanade.tachiyomi.util.ocr.toOcrImage
 import kotlinx.coroutines.CancellationException
 import logcat.LogPriority
 import mihon.domain.ocr.interactor.ClearCachedChapterOcr
-import mihon.domain.ocr.interactor.RunOcrScanSession
 import mihon.domain.ocr.interactor.ScanPageOcr
-import mihon.domain.ocr.model.OcrImage
+import mihon.domain.ocr.interactor.WithOcrScanSession
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChapter
 import tachiyomi.domain.manga.interactor.GetManga
@@ -14,9 +13,9 @@ import tachiyomi.domain.manga.interactor.GetManga
 internal class OcrChapterScanner(
     private val getChapter: GetChapter,
     private val getManga: GetManga,
-    private val clearOcrCachedChapter: ClearCachedChapterOcr,
-    private val runOcrScanSession: RunOcrScanSession,
-    private val scanOcrPage: ScanPageOcr,
+    private val clearCachedChapterOcr: ClearCachedChapterOcr,
+    private val withOcrScanSession: WithOcrScanSession,
+    private val scanPageOcr: ScanPageOcr,
     private val pageSourceResolver: OcrPageSourceResolver,
 ) {
     suspend fun scanChapter(
@@ -34,7 +33,7 @@ internal class OcrChapterScanner(
                     mangaTitle = null,
                     chapterId = chapterId,
                     chapterName = chapterId.toString(),
-                    error = "Chapter not found",
+                    failure = OcrScanFailure.ChapterNotFound,
                 ),
             )
             return false
@@ -48,15 +47,15 @@ internal class OcrChapterScanner(
                     mangaTitle = null,
                     chapterId = chapterId,
                     chapterName = chapter.name,
-                    error = "Manga not found",
+                    failure = OcrScanFailure.MangaNotFound,
                 ),
             )
             return false
         }
 
         return try {
-            runOcrScanSession.await {
-                clearOcrCachedChapter.await(chapterId)
+            withOcrScanSession.run {
+                clearCachedChapterOcr.await(chapterId)
                 onCacheStateChanged(chapterId, false)
 
                 val resolvedPages = pageSourceResolver.resolve(manga, chapter)
@@ -68,7 +67,7 @@ internal class OcrChapterScanner(
                                 mangaTitle = manga.title,
                                 chapterId = chapterId,
                                 chapterName = chapter.name,
-                                error = "No pages available for OCR scanning",
+                                failure = OcrScanFailure.NoPages,
                             ),
                         )
                         false
@@ -88,14 +87,10 @@ internal class OcrChapterScanner(
                         try {
                             var chapterHasCachedResults = false
                             pages.pages.forEachIndexed { index, page ->
-                                val decodedBitmap = page.openBitmap() ?: error("Unable to decode page ${page.pageIndex + 1}")
-                                val bitmap = decodedBitmap.toArgb8888Bitmap()
+                                val bitmap = page.openBitmap() ?: error("Unable to decode page ${page.pageIndex + 1}")
                                 try {
-                                    scanOcrPage.await(chapterId, page.pageIndex, bitmap.toOcrImage())
+                                    scanPageOcr.await(chapterId, page.pageIndex, bitmap.toOcrImage())
                                 } finally {
-                                    if (bitmap !== decodedBitmap && !decodedBitmap.isRecycled) {
-                                        decodedBitmap.recycle()
-                                    }
                                     if (!bitmap.isRecycled) {
                                         bitmap.recycle()
                                     }
@@ -117,7 +112,7 @@ internal class OcrChapterScanner(
                                 throw e
                             }
                             logcat(LogPriority.ERROR, e) { "Failed to scan OCR for chapterId=$chapterId" }
-                            clearOcrCachedChapter.await(chapterId)
+                            clearCachedChapterOcr.await(chapterId)
                             onCacheStateChanged(chapterId, false)
                             onError(
                                 OcrChapterScanError(
@@ -125,7 +120,7 @@ internal class OcrChapterScanner(
                                     mangaTitle = manga.title,
                                     chapterId = chapterId,
                                     chapterName = chapter.name,
-                                    error = e.message,
+                                    failure = OcrScanFailure.Unexpected(e.message),
                                 ),
                             )
                             false
@@ -138,7 +133,7 @@ internal class OcrChapterScanner(
                 throw e
             }
             logcat(LogPriority.ERROR, e) { "Failed to start OCR scan for chapterId=$chapterId" }
-            clearOcrCachedChapter.await(chapterId)
+            clearCachedChapterOcr.await(chapterId)
             onCacheStateChanged(chapterId, false)
             onError(
                 OcrChapterScanError(
@@ -146,7 +141,7 @@ internal class OcrChapterScanner(
                     mangaTitle = manga.title,
                     chapterId = chapterId,
                     chapterName = chapter.name,
-                    error = e.message,
+                    failure = OcrScanFailure.Unexpected(e.message),
                 ),
             )
             false
@@ -168,22 +163,15 @@ internal data class OcrChapterScanError(
     val mangaTitle: String?,
     val chapterId: Long,
     val chapterName: String,
-    val error: String?,
+    val failure: OcrScanFailure,
 )
 
-private fun Bitmap.toArgb8888Bitmap(): Bitmap {
-    if (config == Bitmap.Config.ARGB_8888) {
-        return this
-    }
-    return copy(Bitmap.Config.ARGB_8888, false) ?: this
-}
+internal sealed interface OcrScanFailure {
+    data object ChapterNotFound : OcrScanFailure
 
-private fun Bitmap.toOcrImage(): OcrImage {
-    val pixels = IntArray(width * height)
-    getPixels(pixels, 0, width, 0, 0, width, height)
-    return OcrImage(
-        width = width,
-        height = height,
-        pixels = pixels,
-    )
+    data object MangaNotFound : OcrScanFailure
+
+    data object NoPages : OcrScanFailure
+
+    data class Unexpected(val message: String?) : OcrScanFailure
 }

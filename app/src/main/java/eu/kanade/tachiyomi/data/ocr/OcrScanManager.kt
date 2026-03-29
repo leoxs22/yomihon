@@ -142,7 +142,7 @@ class OcrScanManager internal constructor(
 
     suspend fun cancelQueuedChapters(chapterIds: Collection<Long>) {
         val idsToCancel = chapterIds.toSet()
-        val (cancelledActive, shouldRestart) = mutex.withLock {
+        val result = mutex.withLock {
             val currentState = mutableQueueState.value
             val activeEntry = currentState.activeEntry
             val cancelledActive = activeEntry?.chapterId in idsToCancel
@@ -158,18 +158,28 @@ class OcrScanManager internal constructor(
 
             persistQueueState(nextState)
 
-            cancelledActive to (cancelledActive && !nextState.isPaused && nextState.hasQueuedEntries)
+            CancelResult(
+                cancelledActive = cancelledActive,
+                hasQueuedEntries = nextState.hasQueuedEntries,
+                isPaused = nextState.isPaused,
+                isEmpty = nextState.entries.isEmpty(),
+            )
         }
 
-        if (cancelledActive) {
+        if (result.cancelledActive) {
             notifier.dismissProgress()
             workerController.stop()
-            if (shouldRestart) {
+            if (!result.isPaused && result.hasQueuedEntries) {
                 workerController.restart()
             }
-        } else if (queueState.value.entries.isEmpty()) {
+            return
+        }
+
+        if (result.isEmpty) {
             notifier.dismissProgress()
-        } else if (shouldRestart) {
+        }
+
+        if (!result.isPaused && result.hasQueuedEntries) {
             startWorkerIfNeeded()
         }
     }
@@ -204,13 +214,7 @@ class OcrScanManager internal constructor(
                         notifier.onComplete(progress)
                     },
                     onError = { error ->
-                        lastError = error.error
-                        notifier.onError(
-                            mangaId = error.mangaId,
-                            mangaTitle = error.mangaTitle,
-                            chapterName = error.chapterName,
-                            error = error.error,
-                        )
+                        lastError = notifier.onError(error)
                     },
                     onCacheStateChanged = { changedChapterId, hasResults ->
                         cacheEventsFlow.tryEmit(
@@ -237,15 +241,17 @@ class OcrScanManager internal constructor(
                 logcat(LogPriority.ERROR, e) {
                     "Unexpected OCR queue failure while scanning chapterId=$chapterId"
                 }
-                notifier.onError(
+                val scanError = OcrChapterScanError(
                     mangaId = null,
                     mangaTitle = null,
+                    chapterId = chapterId,
                     chapterName = chapterId.toString(),
-                    error = e.message,
+                    failure = OcrScanFailure.Unexpected(e.message),
                 )
+                lastError = notifier.onError(scanError)
                 markChapterFailed(
                     chapterId = chapterId,
-                    lastError = e.message,
+                    lastError = lastError,
                 )
             }
         }
@@ -396,6 +402,13 @@ class OcrScanManager internal constructor(
     private fun startWorkerIfNeeded() {
         workerController.start()
     }
+
+    private data class CancelResult(
+        val cancelledActive: Boolean,
+        val hasQueuedEntries: Boolean,
+        val isPaused: Boolean,
+        val isEmpty: Boolean,
+    )
 }
 
 private fun List<OcrScanQueueEntry>.requeueActiveEntryToFront(): List<OcrScanQueueEntry> {

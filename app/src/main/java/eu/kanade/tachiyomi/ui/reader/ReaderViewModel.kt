@@ -40,6 +40,7 @@ import eu.kanade.tachiyomi.util.chapter.removeDuplicates
 import eu.kanade.tachiyomi.util.editCover
 import eu.kanade.tachiyomi.util.lang.byteSize
 import eu.kanade.tachiyomi.util.lang.takeBytes
+import eu.kanade.tachiyomi.util.ocr.toOcrImage
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +59,6 @@ import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import mihon.domain.ocr.exception.OcrException
 import mihon.domain.ocr.interactor.OcrProcessor
-import mihon.domain.ocr.model.OcrImage
 import mihon.domain.ocr.repository.OcrRepository
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.lang.launchIO
@@ -1082,14 +1082,4 @@ class ReaderViewModel @JvmOverloads constructor(
         data object OcrInitializationError : Event
         data object OcrError : Event
     }
-}
-
-private fun Bitmap.toOcrImage(): OcrImage {
-    val pixels = IntArray(width * height)
-    getPixels(pixels, 0, width, 0, 0, width, height)
-    return OcrImage(
-        width = width,
-        height = height,
-        pixels = pixels,
-    )
 }
