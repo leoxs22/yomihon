@@ -4,10 +4,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,6 +30,16 @@ class OcrScanManager internal constructor(
     internal val cacheEvents = cacheEventsFlow.asSharedFlow()
     internal val isScannerRunning: Flow<Boolean>
         get() = workerController.isRunningFlow()
+
+    val status: Flow<OcrQueueStatus>
+        get() = queueState
+            .map { state ->
+                OcrQueueStatus(
+                    pending = state.entries.size,
+                    isPaused = state.isPaused,
+                )
+            }
+            .distinctUntilChanged()
 
     fun startIfPending() {
         if (!queueState.value.isPaused && queueState.value.hasQueuedEntries) {
@@ -412,6 +424,11 @@ class OcrScanManager internal constructor(
         val isEmpty: Boolean,
     )
 }
+
+data class OcrQueueStatus(
+    val pending: Int,
+    val isPaused: Boolean,
+)
 
 private fun List<OcrScanQueueEntry>.requeueActiveEntryToFront(): List<OcrScanQueueEntry> {
     val activeEntry = firstOrNull { entry -> entry.state == OcrScanQueueEntry.State.SCANNING }
