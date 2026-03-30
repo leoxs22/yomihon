@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.tachiyomi.data.dictionary.DictionaryImportCoordinator
+import eu.kanade.tachiyomi.domain.dictionary.DictionarySettingsCoordinator
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
@@ -15,7 +15,6 @@ import mihon.domain.dictionary.interactor.DictionaryInteractor
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryMigrationState
 import mihon.domain.dictionary.model.DictionaryMigrationStatus
-import mihon.domain.dictionary.repository.DictionaryRepository
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -23,8 +22,7 @@ import uy.kohesive.injekt.api.get
 
 class DictionarySettingsScreenModel(
     private val dictionaryInteractor: DictionaryInteractor = Injekt.get(),
-    private val dictionaryRepository: DictionaryRepository = Injekt.get(),
-    private val dictionaryImportCoordinator: DictionaryImportCoordinator = Injekt.get(),
+    private val dictionarySettingsCoordinator: DictionarySettingsCoordinator = Injekt.get(),
 ) : StateScreenModel<DictionarySettingsScreenModel.State>(State()) {
 
     init {
@@ -32,7 +30,7 @@ class DictionarySettingsScreenModel(
         observeMigrationStatuses()
 
         screenModelScope.launch {
-            dictionaryImportCoordinator.isRunningFlow()
+            dictionarySettingsCoordinator.isRunningFlow()
                 .collectLatest { isRunning ->
                     mutableState.update {
                         it.copy(
@@ -45,7 +43,7 @@ class DictionarySettingsScreenModel(
 
     private fun observeDictionaries() {
         screenModelScope.launch {
-            dictionaryRepository.subscribeToDictionaries().collectLatest { dictionaries ->
+            dictionarySettingsCoordinator.observeDictionaries().collectLatest { dictionaries ->
                 mutableState.update {
                     it.copy(
                         dictionaries = dictionaries,
@@ -58,7 +56,7 @@ class DictionarySettingsScreenModel(
 
     private fun observeMigrationStatuses() {
         screenModelScope.launch {
-            dictionaryRepository.subscribeToMigrationStatuses().collectLatest { statuses ->
+            dictionarySettingsCoordinator.observeMigrationStatuses().collectLatest { statuses ->
                 val activeStatuses = statuses.filter { it.state != DictionaryMigrationState.COMPLETE }
                 val currentStatus = activeStatuses.firstOrNull()
                 mutableState.update {
@@ -73,11 +71,11 @@ class DictionarySettingsScreenModel(
     }
 
     fun importDictionaryFromUri(uri: Uri) {
-        dictionaryImportCoordinator.startFromUri(uri)
+        dictionarySettingsCoordinator.startFromUri(uri)
     }
 
     fun importDictionaryFromUrl(url: String) {
-        dictionaryImportCoordinator.startFromUrl(url)
+        dictionarySettingsCoordinator.startFromUrl(url)
     }
 
     fun updateDictionary(context: Context, dictionary: Dictionary) {
