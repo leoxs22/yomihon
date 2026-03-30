@@ -181,37 +181,23 @@ class SearchDictionaryTerms(
         if (requestedDictionaryIds.isEmpty()) return emptyList()
 
         val requestedIdsSet = requestedDictionaryIds.toSet()
-        val cached = cachedHoshiTermMeta(expression, requestedDictionaryIds)
-        if (cached.isNotEmpty()) {
-            return cached.distinctBy { meta ->
-                "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
-            }
-        }
+        cachedHoshiTermMeta(expression, requestedDictionaryIds)
+            .filter { it.dictionaryId in requestedIdsSet }
+            .takeIf { it.isNotEmpty() }
+            ?.let { return it.distinctBy(::metaKey) }
 
-        val readyHoshiDictionaryIds = dictionaryRepository.getAllDictionaries()
-            .asSequence()
-            .filter { it.backend.name == "HOSHI" && it.storageReady }
-            .map { it.id }
-            .toList()
-
-        if (readyHoshiDictionaryIds.isEmpty()) {
-            return emptyList()
-        }
-
-        val exactEntries = dictionarySearchBackend.exactSearch(expression, readyHoshiDictionaryIds)
+        val exactEntries = dictionarySearchBackend.exactSearch(expression, requestedDictionaryIds)
         cacheBackendEntries(exactEntries)
         val exactMeta = exactEntries
             .flatMap { it.termMeta }
             .filter { it.dictionaryId in requestedIdsSet }
         if (exactMeta.isNotEmpty()) {
-            return exactMeta.distinctBy { meta ->
-                "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
-            }
+            return exactMeta.distinctBy(::metaKey)
         }
 
         val lookupMatches = dictionarySearchBackend.lookup(
             text = expression,
-            dictionaryIds = readyHoshiDictionaryIds,
+            dictionaryIds = requestedDictionaryIds,
             maxResults = MAX_RESULTS,
         )
         val lookupEntries = lookupMatches.map { match ->
@@ -224,13 +210,11 @@ class SearchDictionaryTerms(
         val lookupMeta = lookupEntries
             .flatMap { it.termMeta }
             .filter { it.dictionaryId in requestedIdsSet }
-        if (lookupMeta.isNotEmpty()) {
-            return lookupMeta.distinctBy { meta ->
-                "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
-            }
-        }
+        return lookupMeta.distinctBy(::metaKey)
+    }
 
-        return emptyList()
+    private fun metaKey(meta: DictionaryTermMeta): String {
+        return "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
     }
 
     private suspend fun searchLegacyJapaneseDeinflected(

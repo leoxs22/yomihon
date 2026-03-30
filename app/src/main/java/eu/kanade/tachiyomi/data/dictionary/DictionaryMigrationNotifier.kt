@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.data.backup
+package eu.kanade.tachiyomi.data.dictionary
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -11,7 +11,7 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 
-class DictionaryImportNotifier(private val context: Context) {
+class DictionaryMigrationNotifier(private val context: Context) {
 
     private val progressNotificationBuilder = context.notificationBuilder(
         Notifications.CHANNEL_DICTIONARY_PROGRESS,

@@ -24,7 +24,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.core.archive.ArchiveReader
-import mihon.data.dictionary.HoshiDictionaryStore
 import mihon.domain.dictionary.interactor.DictionaryInteractor
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryBackend
@@ -32,6 +31,7 @@ import mihon.domain.dictionary.model.DictionaryImportException
 import mihon.domain.dictionary.model.DictionaryIndex
 import mihon.domain.dictionary.service.DictionaryParseException
 import mihon.domain.dictionary.service.DictionaryParser
+import mihon.domain.dictionary.service.DictionaryStorageGateway
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -48,7 +48,7 @@ class DictionaryImportJob(
     private val dictionaryInteractor: DictionaryInteractor = Injekt.get()
     private val dictionaryParser: DictionaryParser = Injekt.get()
     private val networkHelper: NetworkHelper = Injekt.get()
-    private val hoshiDictionaryStore: HoshiDictionaryStore = Injekt.get()
+    private val dictionaryStorageGateway: DictionaryStorageGateway = Injekt.get()
 
     override suspend fun doWork(): Result {
         val uriString = inputData.getString(KEY_URI)
@@ -202,7 +202,6 @@ class DictionaryImportJob(
         setProgress(
             workDataOf(
                 KEY_PROGRESS_STATE to STATE_PARSING,
-                KEY_PROGRESS_ENTRIES_IMPORTED to 0,
             ),
         )
 
@@ -235,7 +234,7 @@ class DictionaryImportJob(
             storageReady = false,
         )
 
-        val storageParent = hoshiDictionaryStore.getDictionaryStorageParent(dictionaryId)
+        val storageParent = dictionaryStorageGateway.getDictionaryStorageParent(dictionaryId)
 
         setProgress(
             workDataOf(
@@ -260,7 +259,7 @@ class DictionaryImportJob(
             storageReady = false,
         )
 
-        val importOutcome = hoshiDictionaryStore.importDictionary(archiveFile.absolutePath, dictionary)
+        val importOutcome = dictionaryStorageGateway.importDictionary(archiveFile.absolutePath, dictionary)
         if (!importOutcome.success || importOutcome.storagePath.isNullOrBlank()) {
             throw DictionaryImportException("Failed to import dictionary into hoshidicts")
         }
@@ -272,8 +271,8 @@ class DictionaryImportJob(
             ),
         )
 
-        hoshiDictionaryStore.markDirty()
-        hoshiDictionaryStore.rebuildSession()
+        dictionaryStorageGateway.markDirty()
+        dictionaryStorageGateway.rebuildSession()
 
         return ImportOutcome(
             dictionaryId = dictionaryId,
@@ -293,7 +292,7 @@ class DictionaryImportJob(
         storageParent?.let { parent ->
             runCatching { parent.deleteRecursively() }
         }
-        hoshiDictionaryStore.markDirty()
+        dictionaryStorageGateway.markDirty()
     }
 
     private fun getDownloadErrorMessage(e: TrustedFileDownloader.TrustedDownloadException): String {
@@ -317,10 +316,8 @@ class DictionaryImportJob(
 
         const val KEY_URI = "uri"
         const val KEY_URL = "url"
-        const val KEY_IMPORT_ID = "import_id"
 
         const val KEY_PROGRESS_STATE = "progress_state"
-        const val KEY_PROGRESS_ENTRIES_IMPORTED = "progress_entries_imported"
         const val KEY_PROGRESS_DICTIONARY_TITLE = "progress_dictionary_title"
         const val KEY_PROGRESS_ERROR = "progress_error"
 
@@ -342,40 +339,31 @@ class DictionaryImportJob(
         fun start(context: Context, uri: Uri) {
             val inputData = workDataOf(
                 KEY_URI to uri.toString(),
-                KEY_IMPORT_ID to System.currentTimeMillis(),
             )
             val request = OneTimeWorkRequestBuilder<DictionaryImportJob>()
                 .addTag(TAG)
                 .setInputData(inputData)
                 .build()
-            context.workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+            context.workManager.enqueueUniqueWork(
+                DictionaryWorkNames.IMPORT_AND_MIGRATION,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                request,
+            )
         }
 
         fun start(context: Context, url: String) {
             val inputData = workDataOf(
                 KEY_URL to url,
-                KEY_IMPORT_ID to System.currentTimeMillis(),
             )
             val request = OneTimeWorkRequestBuilder<DictionaryImportJob>()
                 .addTag(TAG)
                 .setInputData(inputData)
                 .build()
-            context.workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
-        }
-
-        fun stop(context: Context) {
-            context.workManager.cancelUniqueWork(TAG)
-        }
-
-        fun isRunning(context: Context): Boolean {
-            return context.workManager
-                .getWorkInfosByTag(TAG)
-                .get()
-                .any {
-                    it.state == WorkInfo.State.RUNNING ||
-                        it.state == WorkInfo.State.ENQUEUED ||
-                        it.state == WorkInfo.State.BLOCKED
-                }
+            context.workManager.enqueueUniqueWork(
+                DictionaryWorkNames.IMPORT_AND_MIGRATION,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                request,
+            )
         }
 
         fun isRunningFlow(context: Context): Flow<Boolean> {

@@ -10,7 +10,6 @@ import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.backup.DictionaryImportNotifier
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
@@ -22,14 +21,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
-import mihon.data.dictionary.HoshiDictionaryStore
-import mihon.data.dictionary.LegacyDictionaryArchiveBuilder
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryBackend
 import mihon.domain.dictionary.model.DictionaryMigrationStage
 import mihon.domain.dictionary.model.DictionaryMigrationState
 import mihon.domain.dictionary.model.DictionaryMigrationStatus
 import mihon.domain.dictionary.repository.DictionaryRepository
+import mihon.domain.dictionary.service.DictionaryArchiveBuilder
+import mihon.domain.dictionary.service.DictionaryStorageGateway
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
@@ -43,9 +42,9 @@ class DictionaryMigrationJob(
 ) : CoroutineWorker(context, workerParams) {
 
     private val dictionaryRepository: DictionaryRepository = Injekt.get()
-    private val archiveBuilder: LegacyDictionaryArchiveBuilder = Injekt.get()
-    private val hoshiDictionaryStore: HoshiDictionaryStore = Injekt.get()
-    private val notifier = DictionaryImportNotifier(context)
+    private val archiveBuilder: DictionaryArchiveBuilder = Injekt.get()
+    private val dictionaryStorageGateway: DictionaryStorageGateway = Injekt.get()
+    private val notifier = DictionaryMigrationNotifier(context)
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = context.notificationBuilder(Notifications.CHANNEL_DICTIONARY_PROGRESS) {
@@ -168,7 +167,7 @@ class DictionaryMigrationJob(
             deleteRecursively()
             mkdirs()
         }
-        val storageParent = hoshiDictionaryStore.getDictionaryStorageParent(dictionary.id).apply {
+        val storageParent = dictionaryStorageGateway.getDictionaryStorageParent(dictionary.id).apply {
             deleteRecursively()
             mkdirs()
         }
@@ -205,7 +204,7 @@ class DictionaryMigrationJob(
                 total = total,
             )
 
-            val importOutcome = hoshiDictionaryStore.importDictionary(archive.archiveFile.absolutePath, dictionary)
+            val importOutcome = dictionaryStorageGateway.importDictionary(archive.archiveFile.absolutePath, dictionary)
             val storagePath = importOutcome.storagePath
                 ?: throw IllegalStateException("Imported dictionary has no storage path")
             if (!importOutcome.success) {
@@ -220,7 +219,7 @@ class DictionaryMigrationJob(
                 total = total,
             )
 
-            val isValid = hoshiDictionaryStore.validateImportedDictionary(
+            val isValid = dictionaryStorageGateway.validateImportedDictionary(
                 storagePath = storagePath,
                 sampleExpression = archive.sampleExpression,
             )
@@ -230,7 +229,7 @@ class DictionaryMigrationJob(
 
             dictionaryRepository.updateDictionaryStorage(
                 dictionaryId = dictionary.id,
-                backend = DictionaryBackend.HOSHI.toDbValue(),
+                backend = DictionaryBackend.HOSHI,
                 storagePath = storagePath,
                 storageReady = true,
             )
@@ -242,8 +241,8 @@ class DictionaryMigrationJob(
                 completed = completed,
                 total = total,
             )
-            hoshiDictionaryStore.markDirty()
-            hoshiDictionaryStore.rebuildSession()
+            dictionaryStorageGateway.markDirty()
+            dictionaryStorageGateway.rebuildSession()
 
             updateStatus(
                 dictionary = dictionary,
@@ -330,7 +329,7 @@ class DictionaryMigrationJob(
                 .addTag(TAG)
                 .build()
             context.workManager.enqueueUniqueWork(
-                DictionaryImportJob.TAG,
+                DictionaryWorkNames.IMPORT_AND_MIGRATION,
                 ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request,
             )

@@ -50,7 +50,9 @@ import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.dictionary.interactor.DictionaryInteractor
 import mihon.domain.dictionary.interactor.SearchDictionaryTerms
 import mihon.domain.dictionary.repository.DictionaryRepository
+import mihon.domain.dictionary.service.DictionaryArchiveBuilder
 import mihon.domain.dictionary.service.DictionarySearchBackend
+import mihon.domain.dictionary.service.DictionaryStorageGateway
 import mihon.domain.dictionary.service.DictionaryParser
 import mihon.domain.extensionrepo.interactor.CreateExtensionRepo
 import mihon.domain.extensionrepo.interactor.DeleteExtensionRepo
@@ -254,7 +256,9 @@ class DomainModule : InjektModule {
         addSingletonFactory<DictionaryParser> { DictionaryParserImpl() }
         addSingletonFactory { HoshiDictionaryStore(get<Application>(), get()) }
         addSingletonFactory<DictionarySearchBackend> { get<HoshiDictionaryStore>() }
+        addSingletonFactory<DictionaryStorageGateway> { get<HoshiDictionaryStore>() }
         addSingletonFactory { LegacyDictionaryArchiveBuilder(get()) }
+        addSingletonFactory<DictionaryArchiveBuilder> { get<LegacyDictionaryArchiveBuilder>() }
         addFactory { DictionaryInteractor(get()) }
         addFactory { SearchDictionaryTerms(get(), get()) }
 

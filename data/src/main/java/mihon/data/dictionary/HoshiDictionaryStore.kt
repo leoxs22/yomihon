@@ -19,6 +19,8 @@ import mihon.domain.dictionary.model.DictionaryTermMeta
 import mihon.domain.dictionary.model.GlossaryEntry
 import mihon.domain.dictionary.model.TermMetaMode
 import mihon.domain.dictionary.repository.DictionaryRepository
+import mihon.domain.dictionary.service.DictionaryStorageGateway
+import mihon.domain.dictionary.service.DictionaryStorageImportOutcome
 import mihon.domain.dictionary.service.DictionaryLookupMatch
 import mihon.domain.dictionary.service.DictionarySearchBackend
 import mihon.domain.dictionary.service.DictionarySearchEntry
@@ -27,7 +29,7 @@ class HoshiDictionaryStore(
     private val application: Application,
     private val dictionaryRepository: DictionaryRepository,
     private val dictionaryParser: DictionaryParserImpl = DictionaryParserImpl(),
-) : DictionarySearchBackend {
+) : DictionarySearchBackend, DictionaryStorageGateway {
 
     private val hoshi = HoshiDicts()
     private val rebuildMutex = Mutex()
@@ -36,26 +38,26 @@ class HoshiDictionaryStore(
     @Volatile
     private var sessionState: SessionState? = null
 
-    suspend fun rebuildSession() {
+    override suspend fun rebuildSession() {
         rebuildInternal(force = true)
     }
 
-    fun markDirty() {
+    override fun markDirty() {
         dirty.set(true)
     }
 
-    fun getDictionaryStorageParent(dictionaryId: Long): File {
+    override fun getDictionaryStorageParent(dictionaryId: Long): File {
         return File(application.filesDir, "dictionaries/hoshi/$dictionaryId").apply { mkdirs() }
     }
 
-    suspend fun importDictionary(
+    override suspend fun importDictionary(
         zipPath: String,
         dictionary: Dictionary,
-    ): HoshiImportOutcome = withContext(Dispatchers.IO) {
+    ): DictionaryStorageImportOutcome = withContext(Dispatchers.IO) {
         val parent = getDictionaryStorageParent(dictionary.id)
         val result = hoshi.importDictionary(zipPath, parent.absolutePath)
         val finalDir = parent.listFiles()?.firstOrNull { File(it, ".hoshidicts_1").exists() }
-        HoshiImportOutcome(
+        DictionaryStorageImportOutcome(
             success = result.success,
             storagePath = finalDir?.absolutePath,
             termCount = result.termCount,
@@ -64,7 +66,7 @@ class HoshiDictionaryStore(
         )
     }
 
-    suspend fun validateImportedDictionary(
+    override suspend fun validateImportedDictionary(
         storagePath: String,
         sampleExpression: String?,
     ): Boolean = withContext(Dispatchers.IO) {
@@ -204,7 +206,6 @@ class HoshiDictionaryStore(
         state: SessionState,
     ): List<DictionarySearchEntry> {
         val metaByDictionaryId = buildMetaByDictionaryId(termResult, allowedDictionaryIds, state)
-        val aggregatedMeta = metaByDictionaryId.values.flatten()
 
         return termResult.glossaries.mapNotNull { glossaryEntry ->
             val dictionaryId = resolveDictionaryId(
@@ -226,7 +227,7 @@ class HoshiDictionaryStore(
                     sequence = null,
                     termTags = glossaryEntry.termTags.ifBlank { null },
                 ),
-                termMeta = aggregatedMeta,
+                termMeta = metaByDictionaryId[dictionaryId].orEmpty(),
             )
         }
     }
@@ -342,14 +343,6 @@ class HoshiDictionaryStore(
         }
         append('"')
     }
-
-    data class HoshiImportOutcome(
-        val success: Boolean,
-        val storagePath: String?,
-        val termCount: Long,
-        val metaCount: Long,
-        val mediaCount: Long,
-    )
 
     private data class SessionState(
         val handle: Long,

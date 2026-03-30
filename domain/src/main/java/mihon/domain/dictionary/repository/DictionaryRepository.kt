@@ -1,6 +1,7 @@
 package mihon.domain.dictionary.repository
 
 import kotlinx.coroutines.flow.Flow
+import mihon.domain.dictionary.model.DictionaryBackend
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryKanjiExport
 import mihon.domain.dictionary.model.DictionaryMigrationStatus
@@ -28,47 +29,38 @@ interface DictionaryRepository {
     suspend fun getFreqDictionaryIds(): List<Long>
     suspend fun updateDictionaryStorage(
         dictionaryId: Long,
-        backend: String,
+        backend: DictionaryBackend,
         storagePath: String?,
         storageReady: Boolean,
     )
 
     // Tag operations
-    suspend fun insertTags(tags: List<DictionaryTag>)
     suspend fun getTagsForDictionary(dictionaryId: Long): List<DictionaryTag>
     suspend fun getTagCountForDictionary(dictionaryId: Long): Long
     suspend fun deleteTagsForDictionary(dictionaryId: Long)
 
     // Term operations
-    suspend fun getTermsForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTerm>
     suspend fun getTermsExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTermExport>
     suspend fun getTermCountForDictionary(dictionaryId: Long): Long
-    suspend fun insertTerms(terms: List<DictionaryTerm>)
     suspend fun searchTerms(query: String, dictionaryIds: List<Long>): List<DictionaryTerm>
     suspend fun getTermsByExpression(expression: String, dictionaryIds: List<Long>): List<DictionaryTerm>
     suspend fun deleteTermsForDictionary(dictionaryId: Long)
 
     // Kanji operations
-    suspend fun getKanjiForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanji>
     suspend fun getKanjiExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanjiExport>
     suspend fun getKanjiCountForDictionary(dictionaryId: Long): Long
-    suspend fun insertKanji(kanji: List<DictionaryKanji>)
     suspend fun getKanjiByCharacter(character: String, dictionaryIds: List<Long>): List<DictionaryKanji>
     suspend fun deleteKanjiForDictionary(dictionaryId: Long)
 
     // Term meta operations
-    suspend fun getTermMetaForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTermMeta>
     suspend fun getTermMetaExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTermMetaExport>
     suspend fun getTermMetaCountForDictionary(dictionaryId: Long): Long
-    suspend fun insertTermMeta(termMeta: List<DictionaryTermMeta>)
     suspend fun getTermMetaForExpression(expression: String, dictionaryIds: List<Long>): List<DictionaryTermMeta>
     suspend fun deleteTermMetaForDictionary(dictionaryId: Long)
 
     // Kanji meta operations
-    suspend fun getKanjiMetaForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanjiMeta>
     suspend fun getKanjiMetaExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanjiMetaExport>
     suspend fun getKanjiMetaCountForDictionary(dictionaryId: Long): Long
-    suspend fun insertKanjiMeta(kanjiMeta: List<DictionaryKanjiMeta>)
     suspend fun getKanjiMetaForCharacter(character: String, dictionaryIds: List<Long>): List<DictionaryKanjiMeta>
     suspend fun deleteKanjiMetaForDictionary(dictionaryId: Long)
 

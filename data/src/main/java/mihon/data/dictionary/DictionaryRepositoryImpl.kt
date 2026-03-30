@@ -130,14 +130,14 @@ class DictionaryRepositoryImpl(
 
     override suspend fun updateDictionaryStorage(
         dictionaryId: Long,
-        backend: String,
+        backend: DictionaryBackend,
         storagePath: String?,
         storageReady: Boolean,
     ) {
         handler.await(inTransaction = true) {
             dictionaryQueries.updateDictionaryStorage(
                 id = dictionaryId,
-                backend = backend,
+                backend = backend.toDbValue(),
                 storage_path = storagePath,
                 storage_ready = if (storageReady) 1L else 0L,
             )
@@ -145,23 +145,6 @@ class DictionaryRepositoryImpl(
     }
 
     // Tag operations
-
-    override suspend fun insertTags(tags: List<DictionaryTag>) {
-        tags.chunked(100).forEach { chunk ->
-            handler.await(inTransaction = true) {
-                chunk.forEach { tag ->
-                    dictionaryQueries.insertTag(
-                        dictionary_id = tag.dictionaryId,
-                        name = tag.name,
-                        category = tag.category,
-                        tag_order = tag.order.toLong(),
-                        notes = tag.notes,
-                        score = tag.score.toLong(),
-                    )
-                }
-            }
-        }
-    }
 
     override suspend fun getTagsForDictionary(dictionaryId: Long): List<DictionaryTag> {
         return handler.awaitList {
@@ -182,36 +165,6 @@ class DictionaryRepositoryImpl(
     }
 
     // Term operations
-
-    override suspend fun insertTerms(terms: List<DictionaryTerm>) {
-        terms.chunked(2000).forEach { chunk ->
-            handler.await(inTransaction = true) {
-                chunk.forEach { term ->
-                    dictionaryQueries.insertTerm(
-                        dictionary_id = term.dictionaryId,
-                        expression = term.expression,
-                        reading = term.reading,
-                        definition_tags = term.definitionTags,
-                        rules = term.rules,
-                        score = term.score.toLong(),
-                        glossary = json.encodeToString(glossarySerializer, term.glossary),
-                        sequence = term.sequence,
-                        term_tags = term.termTags,
-                    )
-                }
-            }
-        }
-    }
-
-    override suspend fun getTermsForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTerm> {
-        return handler.awaitList {
-            dictionaryQueries.getTermsForDictionary(
-                dictionaryId = dictionaryId,
-                limit = limit,
-                offset = offset,
-            )
-        }.map { it.toDomain() }
-    }
 
     override suspend fun getTermsExportForDictionary(
         dictionaryId: Long,
@@ -271,34 +224,6 @@ class DictionaryRepositoryImpl(
 
     // Kanji operations
 
-    override suspend fun insertKanji(kanji: List<DictionaryKanji>) {
-        kanji.chunked(2000).forEach { chunk ->
-            handler.await(inTransaction = true) {
-                chunk.forEach { k ->
-                    dictionaryQueries.insertKanji(
-                        dictionary_id = k.dictionaryId,
-                        character = k.character,
-                        onyomi = k.onyomi,
-                        kunyomi = k.kunyomi,
-                        tags = k.tags,
-                        meanings = json.encodeToString(k.meanings),
-                        stats = k.stats?.let { json.encodeToString(it) },
-                    )
-                }
-            }
-        }
-    }
-
-    override suspend fun getKanjiForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanji> {
-        return handler.awaitList {
-            dictionaryQueries.getKanjiForDictionary(
-                dictionaryId = dictionaryId,
-                limit = limit,
-                offset = offset,
-            )
-        }.map { it.toDomain() }
-    }
-
     override suspend fun getKanjiExportForDictionary(
         dictionaryId: Long,
         limit: Long,
@@ -345,35 +270,6 @@ class DictionaryRepositoryImpl(
 
     // Term meta operations
 
-    override suspend fun insertTermMeta(termMeta: List<DictionaryTermMeta>) {
-        termMeta.chunked(2000).forEach { chunk ->
-            handler.await(inTransaction = true) {
-                chunk.forEach { meta ->
-                    dictionaryQueries.insertTermMeta(
-                        dictionary_id = meta.dictionaryId,
-                        expression = meta.expression,
-                        mode = meta.mode.toDbString(),
-                        data = meta.data,
-                    )
-                }
-            }
-        }
-    }
-
-    override suspend fun getTermMetaForDictionary(
-        dictionaryId: Long,
-        limit: Long,
-        offset: Long,
-    ): List<DictionaryTermMeta> {
-        return handler.awaitList {
-            dictionaryQueries.getTermMetaForDictionary(
-                dictionaryId = dictionaryId,
-                limit = limit,
-                offset = offset,
-            )
-        }.map { it.toDomain() }
-    }
-
     override suspend fun getTermMetaExportForDictionary(
         dictionaryId: Long,
         limit: Long,
@@ -419,35 +315,6 @@ class DictionaryRepositoryImpl(
     }
 
     // Kanji meta operations
-
-    override suspend fun insertKanjiMeta(kanjiMeta: List<DictionaryKanjiMeta>) {
-        kanjiMeta.chunked(2000).forEach { chunk ->
-            handler.await(inTransaction = true) {
-                chunk.forEach { meta ->
-                    dictionaryQueries.insertKanjiMeta(
-                        dictionary_id = meta.dictionaryId,
-                        character = meta.character,
-                        mode = meta.mode.toDbString(),
-                        data = meta.data,
-                    )
-                }
-            }
-        }
-    }
-
-    override suspend fun getKanjiMetaForDictionary(
-        dictionaryId: Long,
-        limit: Long,
-        offset: Long,
-    ): List<DictionaryKanjiMeta> {
-        return handler.awaitList {
-            dictionaryQueries.getKanjiMetaForDictionary(
-                dictionaryId = dictionaryId,
-                limit = limit,
-                offset = offset,
-            )
-        }.map { it.toDomain() }
-    }
 
     override suspend fun getKanjiMetaExportForDictionary(
         dictionaryId: Long,

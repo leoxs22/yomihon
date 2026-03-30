@@ -22,17 +22,20 @@ import mihon.domain.dictionary.model.GlossaryNode
 import mihon.domain.dictionary.model.GlossaryTag
 import mihon.domain.dictionary.model.DictionaryTag
 import mihon.domain.dictionary.repository.DictionaryRepository
+import mihon.domain.dictionary.service.DictionaryArchiveBuildResult
+import mihon.domain.dictionary.service.DictionaryArchiveBuilder
+import mihon.domain.dictionary.service.DictionaryArchiveProgress
 import kotlin.coroutines.coroutineContext
 
 class LegacyDictionaryArchiveBuilder(
     private val dictionaryRepository: DictionaryRepository,
-) {
+) : DictionaryArchiveBuilder {
 
-    suspend fun buildArchive(
+    override suspend fun buildArchive(
         dictionary: Dictionary,
         destination: File,
-        onProgress: suspend (LegacyArchiveProgress) -> Unit = {},
-    ): LegacyArchiveBuildResult = withContext(Dispatchers.IO) {
+        onProgress: suspend (DictionaryArchiveProgress) -> Unit,
+    ): DictionaryArchiveBuildResult = withContext(Dispatchers.IO) {
         destination.parentFile?.mkdirs()
         if (destination.exists()) {
             destination.delete()
@@ -60,7 +63,7 @@ class LegacyDictionaryArchiveBuilder(
             if (tags.isNotEmpty()) {
                 writeTagBank(zip, tags)
                 onProgress(
-                    LegacyArchiveProgress(
+                    DictionaryArchiveProgress(
                         dictionaryId = dictionary.id,
                         writtenEntries = tagCount,
                         totalEntries = totalEntries(tagCount, termCount, termMetaCount, kanjiCount, kanjiMetaCount),
@@ -75,7 +78,7 @@ class LegacyDictionaryArchiveBuilder(
             writePagedKanjiMeta(zip, dictionary, kanjiMetaCount, onProgress)
         }
 
-        LegacyArchiveBuildResult(
+        DictionaryArchiveBuildResult(
             archiveFile = destination,
             sampleExpression = sampleExpression,
             tagCount = tagCount.toLong(),
@@ -131,7 +134,7 @@ class LegacyDictionaryArchiveBuilder(
         zip: ZipOutputStream,
         dictionary: Dictionary,
         totalCount: Long,
-        onProgress: suspend (LegacyArchiveProgress) -> Unit,
+        onProgress: suspend (DictionaryArchiveProgress) -> Unit,
     ): String? {
         if (totalCount == 0L) return null
 
@@ -167,7 +170,7 @@ class LegacyDictionaryArchiveBuilder(
 
             offset += page.size
             onProgress(
-                LegacyArchiveProgress(
+                DictionaryArchiveProgress(
                     dictionaryId = dictionary.id,
                     writtenEntries = offset,
                     totalEntries = totalCount,
@@ -184,7 +187,7 @@ class LegacyDictionaryArchiveBuilder(
         zip: ZipOutputStream,
         dictionary: Dictionary,
         totalCount: Long,
-        onProgress: suspend (LegacyArchiveProgress) -> Unit,
+        onProgress: suspend (DictionaryArchiveProgress) -> Unit,
     ) {
         if (totalCount == 0L) return
 
@@ -210,7 +213,7 @@ class LegacyDictionaryArchiveBuilder(
 
             offset += page.size
             onProgress(
-                LegacyArchiveProgress(
+                DictionaryArchiveProgress(
                     dictionaryId = dictionary.id,
                     writtenEntries = offset,
                     totalEntries = totalCount,
@@ -225,7 +228,7 @@ class LegacyDictionaryArchiveBuilder(
         zip: ZipOutputStream,
         dictionary: Dictionary,
         totalCount: Long,
-        onProgress: suspend (LegacyArchiveProgress) -> Unit,
+        onProgress: suspend (DictionaryArchiveProgress) -> Unit,
     ) {
         if (totalCount == 0L) return
 
@@ -247,7 +250,7 @@ class LegacyDictionaryArchiveBuilder(
 
             offset += page.size
             onProgress(
-                LegacyArchiveProgress(
+                DictionaryArchiveProgress(
                     dictionaryId = dictionary.id,
                     writtenEntries = offset,
                     totalEntries = totalCount,
@@ -262,7 +265,7 @@ class LegacyDictionaryArchiveBuilder(
         zip: ZipOutputStream,
         dictionary: Dictionary,
         totalCount: Long,
-        onProgress: suspend (LegacyArchiveProgress) -> Unit,
+        onProgress: suspend (DictionaryArchiveProgress) -> Unit,
     ) {
         if (totalCount == 0L) return
 
@@ -288,7 +291,7 @@ class LegacyDictionaryArchiveBuilder(
 
             offset += page.size
             onProgress(
-                LegacyArchiveProgress(
+                DictionaryArchiveProgress(
                     dictionaryId = dictionary.id,
                     writtenEntries = offset,
                     totalEntries = totalCount,
@@ -313,14 +316,6 @@ class LegacyDictionaryArchiveBuilder(
             writer.rawValue(stats)
         }
         writer.endArray()
-    }
-
-    private fun writeNullableString(writer: SimpleJsonWriter, value: String?) {
-        if (value == null) {
-            writer.nullValue()
-        } else {
-            writer.value(value)
-        }
     }
 
     private fun writeNullableStringAsEmpty(writer: SimpleJsonWriter, value: String?) {
@@ -524,20 +519,3 @@ class LegacyDictionaryArchiveBuilder(
         private val glossarySerializer = ListSerializer(GlossaryEntry.serializer())
     }
 }
-
-data class LegacyArchiveBuildResult(
-    val archiveFile: File,
-    val sampleExpression: String?,
-    val tagCount: Long,
-    val termCount: Long,
-    val termMetaCount: Long,
-    val kanjiCount: Long,
-    val kanjiMetaCount: Long,
-)
-
-data class LegacyArchiveProgress(
-    val dictionaryId: Long,
-    val writtenEntries: Long,
-    val totalEntries: Long,
-    val message: String,
-)
