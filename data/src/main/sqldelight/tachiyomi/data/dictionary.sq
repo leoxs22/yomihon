@@ -239,15 +239,6 @@ FROM (
   LIMIT :limit
 );
 
-getTermsByExpression:
-SELECT T.*
-FROM dictionary_terms AS T
-JOIN dictionaries AS D ON T.dictionary_id = D._id
-WHERE T.expression = :expression
-  AND T.dictionary_id IN :dictionaryIds
-  AND D.is_enabled = 1
-ORDER BY D.priority ASC, T.score DESC;
-
 getTermsExportForDictionary:
 SELECT expression, reading, definition_tags, rules, score, glossary, sequence, term_tags
 FROM dictionary_terms
@@ -315,16 +306,6 @@ WHERE dictionary_id = :dictionaryId;
 deleteTermMetaForDictionary:
 DELETE FROM dictionary_term_meta
 WHERE dictionary_id = :dictionaryId;
-
--- Kanji meta queries
-
-getKanjiMetaForCharacter:
-SELECT M.*
-FROM dictionary_kanji_meta AS M
-JOIN dictionaries AS D ON M.dictionary_id = D._id
-WHERE M.character = :character
-  AND M.dictionary_id IN :dictionaryIds
-  AND D.is_enabled = 1;
 
 getKanjiMetaExportForDictionary:
 SELECT character, mode, data

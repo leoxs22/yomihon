@@ -8,15 +8,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import mihon.domain.dictionary.model.DictionaryKanji
-import mihon.domain.dictionary.model.DictionaryKanjiMeta
 import mihon.domain.dictionary.model.DictionaryTag
 import mihon.domain.dictionary.model.DictionaryTerm
 import mihon.domain.dictionary.model.DictionaryTermMeta
 import mihon.domain.dictionary.model.GlossaryEntry
-import mihon.domain.dictionary.model.KanjiMetaMode
 import mihon.domain.dictionary.model.TermMetaMode
 import tachiyomi.data.Dictionary_kanji
-import tachiyomi.data.Dictionary_kanji_meta
 import tachiyomi.data.Dictionary_tags
 import tachiyomi.data.Dictionary_term_meta
 import tachiyomi.data.Dictionary_terms
@@ -67,16 +64,6 @@ fun Dictionary_term_meta.toDomain(): DictionaryTermMeta {
         dictionaryId = dictionary_id,
         expression = expression,
         mode = TermMetaMode.fromString(mode),
-        data = data_,
-    )
-}
-
-fun Dictionary_kanji_meta.toDomain(): DictionaryKanjiMeta {
-    return DictionaryKanjiMeta(
-        id = _id,
-        dictionaryId = dictionary_id,
-        character = character,
-        mode = KanjiMetaMode.fromString(mode),
         data = data_,
     )
 }

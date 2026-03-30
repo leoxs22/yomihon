@@ -7,7 +7,6 @@ import mihon.domain.dictionary.model.DictionaryKanjiExport
 import mihon.domain.dictionary.model.DictionaryMigrationStatus
 import mihon.domain.dictionary.model.DictionaryLegacyRowCounts
 import mihon.domain.dictionary.model.DictionaryKanji
-import mihon.domain.dictionary.model.DictionaryKanjiMeta
 import mihon.domain.dictionary.model.DictionaryKanjiMetaExport
 import mihon.domain.dictionary.model.DictionaryTag
 import mihon.domain.dictionary.model.DictionaryTerm
@@ -43,7 +42,6 @@ interface DictionaryRepository {
     suspend fun getTermsExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryTermExport>
     suspend fun getTermCountForDictionary(dictionaryId: Long): Long
     suspend fun searchTerms(query: String, dictionaryIds: List<Long>): List<DictionaryTerm>
-    suspend fun getTermsByExpression(expression: String, dictionaryIds: List<Long>): List<DictionaryTerm>
     suspend fun deleteTermsForDictionary(dictionaryId: Long)
 
     // Kanji operations
@@ -61,7 +59,6 @@ interface DictionaryRepository {
     // Kanji meta operations
     suspend fun getKanjiMetaExportForDictionary(dictionaryId: Long, limit: Long, offset: Long): List<DictionaryKanjiMetaExport>
     suspend fun getKanjiMetaCountForDictionary(dictionaryId: Long): Long
-    suspend fun getKanjiMetaForCharacter(character: String, dictionaryIds: List<Long>): List<DictionaryKanjiMeta>
     suspend fun deleteKanjiMetaForDictionary(dictionaryId: Long)
 
     suspend fun getLegacyRowCounts(dictionaryId: Long): DictionaryLegacyRowCounts
