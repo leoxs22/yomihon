@@ -10,6 +10,26 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - `Fixed` - for any bug fixes.
 - `Other` - for technical stuff.
 
+## [v0.2.3] - 2026-03-31
+
+### Added
+- Search filter presets
+- Full-page OCR chapter scanning
+- Dedicated OCR setting screen
+
+### Improved
+- Better Japanese deinflection for searches
+- Near instant dictionary imports
+
+### Changed
+- Reposition the copy button next to OCR text
+- Switch dictionary controls to use Hoshidicts
+- Add top whitespace to images in exported Anki cards
+
+### Other
+- Added database automatic migration logic
+- Added Android DevContainer development support
+
 ## [v0.2.2] - 2026-03-23
 
 ### Added
@@ -82,7 +102,8 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - The full changelog for Mihon releases is available in their [repository](https://github.com/mihonapp/mihon/blob/main/CHANGELOG.md).
 
 
-[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.2...main
+[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.3...main
+[v0.2.3]: https://github.com/yomihon/yomihon/compare/v0.2.2...v0.2.3
 [v0.2.2]: https://github.com/yomihon/yomihon/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/yomihon/yomihon/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/yomihon/yomihon/compare/v0.1.1...v0.2.0
