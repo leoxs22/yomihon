@@ -30,6 +30,7 @@ import mihon.data.ankidroid.AnkiDroidRepositoryImpl
 import mihon.data.dictionary.DictionaryParserImpl
 import mihon.data.dictionary.DictionaryRepositoryImpl
 import mihon.data.ocr.OcrRepositoryImpl
+import mihon.data.panel.PanelDetectionRepositoryImpl
 import mihon.data.repository.ExtensionRepoRepositoryImpl
 import mihon.domain.ankidroid.interactor.AddDictionaryCard
 import mihon.domain.ankidroid.interactor.FindExistingAnkiNotes
@@ -51,6 +52,8 @@ import mihon.domain.extensionrepo.service.ExtensionRepoService
 import mihon.domain.migration.usecases.MigrateMangaUseCase
 import mihon.domain.ocr.interactor.OcrProcessor
 import mihon.domain.ocr.repository.OcrRepository
+import mihon.domain.panel.interactor.DetectPanels
+import mihon.domain.panel.repository.PanelDetectionRepository
 import mihon.domain.upcoming.interactor.GetUpcomingManga
 import tachiyomi.data.category.CategoryRepositoryImpl
 import tachiyomi.data.chapter.ChapterRepositoryImpl
@@ -237,5 +240,12 @@ class DomainModule : InjektModule {
             )
         }
         addFactory { OcrProcessor(get()) }
+
+        addSingletonFactory<PanelDetectionRepository> {
+            PanelDetectionRepositoryImpl(
+                context = get<Application>(),
+            )
+        }
+        addFactory { DetectPanels(get()) }
     }
 }
