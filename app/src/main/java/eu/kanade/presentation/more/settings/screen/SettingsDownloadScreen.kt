@@ -51,10 +51,6 @@ object SettingsDownloadScreen : SearchableSettings {
                 title = stringResource(MR.strings.split_tall_images),
                 subtitle = stringResource(MR.strings.split_tall_images_summary),
             ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = downloadPreferences.autoOcrOnDownload(),
-                title = stringResource(MR.strings.pref_auto_ocr_on_download),
-            ),
             getDeleteChaptersGroup(
                 downloadPreferences = downloadPreferences,
                 categories = allCategories,

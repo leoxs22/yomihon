@@ -9,4 +9,6 @@ class OcrPreferences(
 ) {
 
     fun ocrModel() = preferenceStore.getEnum("pref_ocr_model", OcrModel.LEGACY)
+
+    fun autoOcrOnDownload() = preferenceStore.getBoolean("auto_ocr_on_download", false)
 }

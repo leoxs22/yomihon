@@ -42,6 +42,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PreferenceGroupHeader
+import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.util.Screen
@@ -71,6 +72,10 @@ object OcrQueueScreen : Screen() {
         val ocrPreferences = remember { Injekt.get<OcrPreferences>() }
         val ocrModelPreference = remember { ocrPreferences.ocrModel() }
         val ocrModel by ocrModelPreference.changes().collectAsState(initial = ocrModelPreference.get())
+        val autoOcrOnDownloadPreference = remember { ocrPreferences.autoOcrOnDownload() }
+        val autoOcrOnDownload by autoOcrOnDownloadPreference
+            .changes()
+            .collectAsState(initial = autoOcrOnDownloadPreference.get())
 
         val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
         var fabExpanded by remember { mutableStateOf(true) }
@@ -184,6 +189,11 @@ object OcrQueueScreen : Screen() {
                         OcrModel.GLENS to stringResource(OcrModel.GLENS.titleRes),
                     ),
                     onValueChange = ocrModelPreference::set,
+                )
+                SwitchPreferenceWidget(
+                    checked = autoOcrOnDownload,
+                    title = stringResource(MR.strings.pref_auto_ocr_on_download),
+                    onCheckedChanged = autoOcrOnDownloadPreference::set,
                 )
 
                 PreferenceGroupHeader(title = stringResource(MR.strings.ocr_queue_header))
