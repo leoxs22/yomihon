@@ -1,8 +1,9 @@
 package mihon.data.dictionary
 
 import java.util.concurrent.ConcurrentHashMap
-import mihon.domain.dictionary.model.DictionaryBackend
+import mihon.domain.dictionary.model.DictionaryIdPartition
 import mihon.domain.dictionary.model.DictionaryTermMeta
+import mihon.domain.dictionary.model.partitionDictionaryIdsByBackend
 import mihon.domain.dictionary.repository.DictionaryRepository
 import mihon.domain.dictionary.service.DictionaryLookupMatch
 import mihon.domain.dictionary.service.DictionarySearchBackend
@@ -86,22 +87,7 @@ class DictionarySearchGatewayImpl(
 
     private suspend fun partitionDictionaryIds(dictionaryIds: List<Long>): DictionaryIdPartition {
         val dictionariesById = dictionaryRepository.getAllDictionaries().associateBy { it.id }
-        val legacy = mutableListOf<Long>()
-        val hoshi = mutableListOf<Long>()
-
-        dictionaryIds.forEach { id ->
-            val dictionary = dictionariesById[id]
-            if (dictionary?.backend == DictionaryBackend.HOSHI && dictionary.storageReady) {
-                hoshi += id
-            } else {
-                legacy += id
-            }
-        }
-
-        return DictionaryIdPartition(
-            legacyIds = legacy,
-            hoshiIds = hoshi,
-        )
+        return partitionDictionaryIdsByBackend(dictionaryIds, dictionariesById)
     }
 
     private fun cacheBackendEntries(entries: List<DictionarySearchEntry>) {
@@ -156,9 +142,4 @@ class DictionarySearchGatewayImpl(
     private fun metaKey(meta: DictionaryTermMeta): String {
         return "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
     }
-
-    private data class DictionaryIdPartition(
-        val legacyIds: List<Long>,
-        val hoshiIds: List<Long>,
-    )
 }

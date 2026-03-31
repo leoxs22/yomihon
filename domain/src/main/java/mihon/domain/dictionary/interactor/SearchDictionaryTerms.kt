@@ -2,10 +2,10 @@ package mihon.domain.dictionary.interactor
 
 import dev.esnault.wanakana.core.Wanakana
 import java.util.LinkedHashMap
-import mihon.domain.dictionary.model.DictionaryBackend
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryTerm
 import mihon.domain.dictionary.model.DictionaryTermMeta
+import mihon.domain.dictionary.model.partitionDictionaryIdsByBackend
 import mihon.domain.dictionary.repository.DictionaryRepository
 import mihon.domain.dictionary.service.Candidate
 import mihon.domain.dictionary.service.DictionarySearchGateway
@@ -39,11 +39,6 @@ class SearchDictionaryTerms(
         val prioritiesById: Map<Long, Int>,
     )
 
-    private data class DictionaryIdSplit(
-        val legacyIds: List<Long>,
-        val hoshiIds: List<Long>,
-    )
-
     private fun Script.isNonCjk(): Boolean =
         this != Script.JAPANESE && this != Script.CHINESE && this != Script.KOREAN
 
@@ -53,28 +48,6 @@ class SearchDictionaryTerms(
         return SearchContext(
             dictionariesById = dictionaries.associateBy { it.id },
             prioritiesById = dictionaries.associate { it.id to it.priority },
-        )
-    }
-
-    private fun splitDictionaryIdsByBackend(
-        dictionaryIds: List<Long>,
-        context: SearchContext,
-    ): DictionaryIdSplit {
-        val legacyIds = mutableListOf<Long>()
-        val hoshiIds = mutableListOf<Long>()
-
-        dictionaryIds.forEach { id ->
-            val dictionary = context.dictionariesById[id]
-            if (dictionary?.backend == DictionaryBackend.HOSHI && dictionary.storageReady) {
-                hoshiIds += id
-            } else {
-                legacyIds += id
-            }
-        }
-
-        return DictionaryIdSplit(
-            legacyIds = legacyIds,
-            hoshiIds = hoshiIds,
         )
     }
 
@@ -255,7 +228,7 @@ class SearchDictionaryTerms(
         context: SearchContext,
     ): List<DictionaryTerm> {
         val normalizedQuery = convertToKana(query.trim())
-        val split = splitDictionaryIdsByBackend(dictionaryIds, context)
+        val split = partitionDictionaryIdsByBackend(dictionaryIds, context.dictionariesById)
         val results = LinkedHashMap<String, DictionaryTerm>(MAX_RESULTS * 2)
         val exactMatchKeys = mutableSetOf<String>()
 
@@ -421,10 +394,7 @@ class SearchDictionaryTerms(
         dictionaryIds: List<Long>,
         context: SearchContext,
     ): FirstWordMatch {
-        val split = splitDictionaryIdsByBackend(dictionaryIds, context)
-        if (split.legacyIds.isEmpty() && split.hoshiIds.isEmpty()) {
-            return firstWordJaLookup(sentence, dictionaryIds)
-        }
+        val split = partitionDictionaryIdsByBackend(dictionaryIds, context.dictionariesById)
 
         val legacyResult = if (split.legacyIds.isNotEmpty()) {
             findFirstLegacyJapaneseWord(sentence = sentence, dictionaryIds = split.legacyIds)
