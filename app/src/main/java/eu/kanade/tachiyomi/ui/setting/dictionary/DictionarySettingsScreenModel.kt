@@ -31,7 +31,7 @@ class DictionarySettingsScreenModel(
         observeMigrationStatuses()
 
         screenModelScope.launch {
-            dictionarySettingsCoordinator.isRunningFlow()
+            dictionarySettingsCoordinator.observeImportRunning()
                 .collectLatest { isRunning ->
                     mutableState.update {
                         it.copy(
