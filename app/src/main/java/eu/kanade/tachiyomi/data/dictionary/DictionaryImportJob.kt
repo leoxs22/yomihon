@@ -77,20 +77,9 @@ class DictionaryImportJob(
         } catch (e: CancellationException) {
             logcat(LogPriority.INFO) { "Dictionary import cancelled" }
             cleanupPartialImport(importedDictionaryId)
-            Result.failure()
-        } catch (e: TrustedFileDownloader.TrustedDownloadException) {
-            val errorMessage = getDownloadErrorMessage(e)
-            logcat(LogPriority.WARN, e) { "Failed to download dictionary: $errorMessage" }
-            cleanupPartialImport(importedDictionaryId)
-            Result.failure()
-        } catch (e: DictionaryImportException) {
-            val errorMessage = e.message ?: "Failed to import dictionary"
-            logcat(LogPriority.WARN, e) { "Dictionary import error: $errorMessage" }
-            cleanupPartialImport(importedDictionaryId)
-            Result.failure()
+            throw e
         } catch (e: Exception) {
-            val errorMessage = e.message ?: "Failed to import dictionary"
-            logcat(LogPriority.ERROR, e) { "Dictionary import failed: $errorMessage" }
+            logImportFailure(e)
             cleanupPartialImport(importedDictionaryId)
             Result.failure()
         } finally {
@@ -199,6 +188,23 @@ class DictionaryImportJob(
             TrustedFileDownloader.Reason.HTTP_ERROR,
             TrustedFileDownloader.Reason.EMPTY_BODY,
             -> "Download failed"
+        }
+    }
+
+    private fun logImportFailure(error: Exception) {
+        when (error) {
+            is TrustedFileDownloader.TrustedDownloadException -> {
+                val errorMessage = getDownloadErrorMessage(error)
+                logcat(LogPriority.WARN, error) { "Failed to download dictionary: $errorMessage" }
+            }
+            is DictionaryImportException -> {
+                val errorMessage = error.message ?: "Failed to import dictionary"
+                logcat(LogPriority.WARN, error) { "Dictionary import error: $errorMessage" }
+            }
+            else -> {
+                val errorMessage = error.message ?: "Failed to import dictionary"
+                logcat(LogPriority.ERROR, error) { "Dictionary import failed: $errorMessage" }
+            }
         }
     }
 
