@@ -29,7 +29,7 @@ internal class SimpleJsonWriter(
         require(pendingName == null) { "Dangling object name" }
         require(stack.lastOrNull()?.type == Type.OBJECT) { "Not currently in an object" }
         out.write("}")
-        stack.removeLast()
+        stack.removeAt(stack.lastIndex)
         return this
     }
 
@@ -43,7 +43,7 @@ internal class SimpleJsonWriter(
     fun endArray(): SimpleJsonWriter {
         require(stack.lastOrNull()?.type == Type.ARRAY) { "Not currently in an array" }
         out.write("]")
-        stack.removeLast()
+        stack.removeAt(stack.lastIndex)
         return this
     }
 
