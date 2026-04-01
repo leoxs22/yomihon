@@ -12,6 +12,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryTag
 import mihon.domain.dictionary.model.GlossaryEntry
@@ -215,7 +218,7 @@ class LegacyDictionaryArchiveBuilder(
                     writer.beginArray()
                     writer.value(meta.expression)
                     writer.value(meta.mode)
-                    writer.rawValue(meta.dataJson)
+                    writer.rawValue(toLegacyTermMetaJson(meta.mode, meta.dataJson))
                     writer.endArray()
                 }
                 writer.endArray()
@@ -371,6 +374,114 @@ class LegacyDictionaryArchiveBuilder(
         kanjiMetaCount: Long,
     ): Long {
         return tagCount + termCount + termMetaCount + kanjiCount + kanjiMetaCount
+    }
+
+    private fun toLegacyTermMetaJson(mode: String, dataJson: String): String {
+        val element = runCatching { glossaryJsonParser.parseToJsonElement(dataJson) }
+            .getOrNull() ?: return dataJson
+
+        return when (mode.lowercase()) {
+            "freq" -> normalizeFrequencyMetaJson(element).toString()
+            "pitch" -> normalizePitchMetaJson(element).toString()
+            else -> element.toString()
+        }
+    }
+
+    private fun normalizeFrequencyMetaJson(element: JsonElement): JsonElement {
+        if (element !is JsonObject) return element
+
+        val reading = element["reading"]?.jsonPrimitive?.contentOrNull
+        val nestedFrequency = element["frequency"]
+        if (nestedFrequency != null) {
+            return if (reading != null) {
+                buildJsonObject {
+                    put("reading", JsonPrimitive(reading))
+                    put("frequency", nestedFrequency)
+                }
+            } else {
+                nestedFrequency
+            }
+        }
+
+        val value = element["value"]?.jsonPrimitive?.intOrNull
+        val displayValue = element["displayValue"]?.jsonPrimitive?.contentOrNull
+        if (value == null && displayValue == null) return element
+
+        val frequencyElement = buildJsonObject {
+            value?.let { put("value", JsonPrimitive(it)) }
+            displayValue?.let { put("displayValue", JsonPrimitive(it)) }
+        }
+
+        return if (reading != null) {
+            buildJsonObject {
+                put("reading", JsonPrimitive(reading))
+                put("frequency", frequencyElement)
+            }
+        } else {
+            frequencyElement
+        }
+    }
+
+    private fun normalizePitchMetaJson(element: JsonElement): JsonElement {
+        if (element !is JsonObject) return element
+
+        val reading = element["reading"]?.jsonPrimitive?.contentOrNull ?: return element
+        val pitches = when (val value = element["pitches"]) {
+            is JsonArray -> value.mapNotNull(::normalizePitchPattern)
+            is JsonObject -> listOfNotNull(normalizePitchPattern(value))
+            else -> emptyList()
+        }
+
+        return buildJsonObject {
+            put("reading", JsonPrimitive(reading))
+            put("pitches", JsonArray(pitches))
+        }
+    }
+
+    private fun normalizePitchPattern(element: JsonElement): JsonObject? {
+        val pitch = element as? JsonObject ?: return null
+        val position = normalizePitchPosition(pitch["position"]) ?: return null
+        val nasal = normalizePitchPositionList(pitch["nasal"])
+        val devoice = normalizePitchPositionList(pitch["devoice"])
+        val tags = normalizePitchTags(pitch["tags"])
+
+        return buildJsonObject {
+            put("position", position)
+            nasal?.let { put("nasal", it) }
+            devoice?.let { put("devoice", it) }
+            tags?.let { put("tags", it) }
+        }
+    }
+
+    private fun normalizePitchPosition(element: JsonElement?): JsonElement? {
+        val primitive = element as? JsonPrimitive ?: return null
+        primitive.intOrNull?.let { return JsonPrimitive(it) }
+
+        val content = primitive.contentOrNull ?: return null
+        return content.toIntOrNull()?.let(::JsonPrimitive) ?: JsonPrimitive(content)
+    }
+
+    private fun normalizePitchPositionList(element: JsonElement?): JsonElement? {
+        return when (element) {
+            is JsonPrimitive -> element.intOrNull?.let(::JsonPrimitive)
+                ?: element.contentOrNull?.toIntOrNull()?.let(::JsonPrimitive)
+            is JsonArray -> {
+                val values = element.mapNotNull { item ->
+                    (item as? JsonPrimitive)?.intOrNull
+                        ?: (item as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+                }
+                JsonArray(values.map(::JsonPrimitive))
+            }
+            else -> null
+        }
+    }
+
+    private fun normalizePitchTags(element: JsonElement?): JsonArray? {
+        val tags = (element as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.map(::JsonPrimitive)
+            ?: return null
+        return JsonArray(tags)
     }
 
     private fun toLegacyGlossaryJson(glossaryJson: String): String {

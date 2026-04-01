@@ -113,6 +113,10 @@ class LegacyDictionaryArchiveBuilderTest {
                 termBank shouldContain "食べる"
                 termBank shouldContain "to eat"
             }
+            zip.getInputStream(zip.getEntry("term_meta_bank_1.json")).bufferedReader().use { reader ->
+                val termMetaBank = reader.readText()
+                termMetaBank shouldContain """["食べる","freq",{"value":12,"displayValue":"12"}]"""
+            }
         }
     }
 
@@ -190,6 +194,107 @@ class LegacyDictionaryArchiveBuilderTest {
             }
             zip.getInputStream(zip.getEntry("kanji_meta_bank_1.json")).bufferedReader().use { reader ->
                 reader.readText() shouldContain """"value":1"""
+            }
+        }
+    }
+
+    @Test
+    fun `buildArchive converts internal frequency metadata back to legacy zip format`() = runTest {
+        val dictionary = Dictionary(
+            id = 3L,
+            title = "Freq Dict",
+            revision = "2026",
+            version = 3,
+        )
+
+        coEvery { repository.getTagsForDictionary(3L) } returns emptyList()
+        coEvery { legacyRepository.getLegacyRowCounts(3L) } returns DictionaryLegacyRowCounts(
+            tagCount = 0L,
+            termCount = 0L,
+            termMetaCount = 2L,
+            kanjiCount = 0L,
+            kanjiMetaCount = 0L,
+        )
+        coEvery { legacyRepository.getTermsExportForDictionary(3L, any(), any()) } returns emptyList()
+        coEvery { legacyRepository.getTermMetaExportForDictionary(3L, any(), 0L) } returns listOf(
+            DictionaryTermMetaExport(
+                expression = "食べる",
+                mode = "freq",
+                dataJson = """{"reading":"たべる","value":12,"displayValue":"12"}""",
+            ),
+            DictionaryTermMetaExport(
+                expression = "見る",
+                mode = "freq",
+                dataJson = """{"value":3,"displayValue":"3"}""",
+            ),
+        )
+        coEvery { legacyRepository.getTermMetaExportForDictionary(3L, any(), 2L) } returns emptyList()
+        coEvery { legacyRepository.getKanjiExportForDictionary(3L, any(), any()) } returns emptyList()
+        coEvery { legacyRepository.getKanjiMetaExportForDictionary(3L, any(), any()) } returns emptyList()
+
+        val output = File(tempDir, "freq.zip")
+        builder.buildArchive(dictionary, output.absolutePath)
+
+        ZipFile(output).use { zip ->
+            zip.getInputStream(zip.getEntry("term_meta_bank_1.json")).bufferedReader().use { reader ->
+                val termMetaBank = reader.readText()
+                termMetaBank shouldContain """"reading":"たべる","frequency":{"value":12,"displayValue":"12"}"""
+                termMetaBank shouldContain """["見る","freq",{"value":3,"displayValue":"3"}]"""
+            }
+        }
+    }
+
+    @Test
+    fun `buildArchive converts internal pitch metadata back to legacy zip format`() = runTest {
+        val dictionary = Dictionary(
+            id = 4L,
+            title = "Pitch Dict",
+            revision = "2026",
+            version = 3,
+        )
+
+        coEvery { repository.getTagsForDictionary(4L) } returns emptyList()
+        coEvery { legacyRepository.getLegacyRowCounts(4L) } returns DictionaryLegacyRowCounts(
+            tagCount = 0L,
+            termCount = 0L,
+            termMetaCount = 1L,
+            kanjiCount = 0L,
+            kanjiMetaCount = 0L,
+        )
+        coEvery { legacyRepository.getTermsExportForDictionary(4L, any(), any()) } returns emptyList()
+        coEvery { legacyRepository.getTermMetaExportForDictionary(4L, any(), 0L) } returns listOf(
+            DictionaryTermMetaExport(
+                expression = "語る",
+                mode = "pitch",
+                dataJson = """
+                {
+                    "reading":"かたる",
+                    "pitches":[
+                        {
+                            "position":"2",
+                            "nasal":["1","3"],
+                            "devoice":"2",
+                            "tags":["common",1],
+                            "extra":"ignored"
+                        }
+                    ],
+                    "extra":"ignored"
+                }
+                """.trimIndent(),
+            ),
+        )
+        coEvery { legacyRepository.getTermMetaExportForDictionary(4L, any(), 1L) } returns emptyList()
+        coEvery { legacyRepository.getKanjiExportForDictionary(4L, any(), any()) } returns emptyList()
+        coEvery { legacyRepository.getKanjiMetaExportForDictionary(4L, any(), any()) } returns emptyList()
+
+        val output = File(tempDir, "pitch.zip")
+        builder.buildArchive(dictionary, output.absolutePath)
+
+        ZipFile(output).use { zip ->
+            zip.getInputStream(zip.getEntry("term_meta_bank_1.json")).bufferedReader().use { reader ->
+                val termMetaBank = reader.readText()
+                termMetaBank shouldContain
+                    """"reading":"かたる","pitches":[{"position":2,"nasal":[1,3],"devoice":2,"tags":["common","1"]}]"""
             }
         }
     }
