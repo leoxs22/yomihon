@@ -4,14 +4,31 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class OcrScanManagerTest {
+
+    @BeforeEach
+    fun setUp() {
+        mockkObject(OcrScanJob.Companion)
+        every { OcrScanJob.start(any()) } returns Unit
+        every { OcrScanJob.stop(any()) } returns Unit
+        every { OcrScanJob.restart(any()) } returns Unit
+    }
+
+    @AfterEach
+    fun tearDown() {
+        unmockkObject(OcrScanJob.Companion)
+    }
 
     @Test
     fun enqueueDedupesAndStartsWorker() = runTest {
