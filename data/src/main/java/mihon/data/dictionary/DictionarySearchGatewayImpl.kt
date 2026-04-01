@@ -8,14 +8,11 @@ import mihon.domain.dictionary.service.DictionaryLookupMatch
 import mihon.domain.dictionary.service.DictionarySearchBackend
 import mihon.domain.dictionary.service.DictionarySearchEntry
 import mihon.domain.dictionary.service.DictionarySearchGateway
-import java.util.concurrent.ConcurrentHashMap
 
 class DictionarySearchGatewayImpl(
     private val dictionaryRepository: DictionaryRepository,
     private val dictionarySearchBackend: DictionarySearchBackend,
 ) : DictionarySearchGateway {
-
-    private val hoshiTermMetaCache = ConcurrentHashMap<String, List<DictionaryTermMeta>>()
 
     override suspend fun exactSearch(
         expression: String,
@@ -32,9 +29,7 @@ class DictionarySearchGatewayImpl(
                 )
             }
             if (partition.hoshiIds.isNotEmpty()) {
-                val entries = dictionarySearchBackend.exactSearch(expression, partition.hoshiIds)
-                cacheBackendEntries(entries)
-                addAll(entries)
+                addAll(dictionarySearchBackend.exactSearch(expression, partition.hoshiIds))
             }
         }
     }
@@ -49,16 +44,7 @@ class DictionarySearchGatewayImpl(
         val hoshiIds = partitionDictionaryIds(dictionaryIds).hoshiIds
         if (hoshiIds.isEmpty()) return emptyList()
 
-        return dictionarySearchBackend.lookup(text, hoshiIds, maxResults).also { matches ->
-            cacheBackendEntries(
-                matches.map { match ->
-                    DictionarySearchEntry(
-                        term = match.term,
-                        termMeta = match.termMeta,
-                    )
-                },
-            )
-        }
+        return dictionarySearchBackend.lookup(text, hoshiIds, maxResults)
     }
 
     override suspend fun getTermMeta(
@@ -79,7 +65,10 @@ class DictionarySearchGatewayImpl(
                     addAll(dictionaryRepository.getTermMetaForExpression(expression, partition.legacyIds))
                 }
                 if (partition.hoshiIds.isNotEmpty()) {
-                    addAll(loadHoshiTermMeta(expression, partition.hoshiIds, requestedIds))
+                    addAll(
+                        dictionarySearchBackend.getTermMeta(listOf(expression), partition.hoshiIds)[expression].orEmpty()
+                            .filter { it.dictionaryId in requestedIds },
+                    )
                 }
             }
         }
@@ -90,56 +79,4 @@ class DictionarySearchGatewayImpl(
         return partitionDictionaryIdsByBackend(dictionaryIds, dictionariesById)
     }
 
-    private fun cacheBackendEntries(entries: List<DictionarySearchEntry>) {
-        entries.forEach { entry ->
-            val cacheKey = "${entry.term.dictionaryId}|${entry.term.expression}"
-            val merged = hoshiTermMetaCache[cacheKey].orEmpty() + entry.termMeta
-            hoshiTermMetaCache[cacheKey] = merged.distinctBy(::metaKey)
-        }
-    }
-
-    private fun cachedHoshiTermMeta(expression: String, dictionaryIds: List<Long>): List<DictionaryTermMeta> {
-        return dictionaryIds.flatMap { dictionaryId ->
-            hoshiTermMetaCache["$dictionaryId|$expression"].orEmpty()
-        }
-    }
-
-    private suspend fun loadHoshiTermMeta(
-        expression: String,
-        requestedDictionaryIds: List<Long>,
-        requestedIds: Set<Long>,
-    ): List<DictionaryTermMeta> {
-        cachedHoshiTermMeta(expression, requestedDictionaryIds)
-            .filter { it.dictionaryId in requestedIds }
-            .takeIf { it.isNotEmpty() }
-            ?.let { return it.distinctBy(::metaKey) }
-
-        val exactEntries = dictionarySearchBackend.exactSearch(expression, requestedDictionaryIds)
-        cacheBackendEntries(exactEntries)
-        exactEntries
-            .flatMap { it.termMeta }
-            .filter { it.dictionaryId in requestedIds }
-            .takeIf { it.isNotEmpty() }
-            ?.let { return it.distinctBy(::metaKey) }
-
-        val lookupEntries = dictionarySearchBackend.lookup(
-            text = expression,
-            dictionaryIds = requestedDictionaryIds,
-            maxResults = 100,
-        ).map { match ->
-            DictionarySearchEntry(
-                term = match.term,
-                termMeta = match.termMeta,
-            )
-        }
-        cacheBackendEntries(lookupEntries)
-        return lookupEntries
-            .flatMap { it.termMeta }
-            .filter { it.dictionaryId in requestedIds }
-            .distinctBy(::metaKey)
-    }
-
-    private fun metaKey(meta: DictionaryTermMeta): String {
-        return "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
-    }
 }

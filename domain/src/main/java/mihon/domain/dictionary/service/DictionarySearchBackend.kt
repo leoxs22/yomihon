@@ -9,6 +9,11 @@ interface DictionarySearchBackend {
         dictionaryIds: List<Long>,
     ): List<DictionarySearchEntry>
 
+    suspend fun getTermMeta(
+        expressions: List<String>,
+        dictionaryIds: List<Long>,
+    ): Map<String, List<DictionaryTermMeta>>
+
     suspend fun lookup(
         text: String,
         dictionaryIds: List<Long>,

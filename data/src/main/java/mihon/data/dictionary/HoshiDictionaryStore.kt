@@ -59,7 +59,7 @@ class HoshiDictionaryStore(
         val parent = getDictionaryStorageParent(dictionaryId)
         val result = hoshi.importDictionary(archivePath, parent.absolutePath)
         val finalDir = result.storagePath.takeIf { path ->
-            path.isNotBlank() && File(path, ".hoshidicts_1").exists()
+            path.isNotBlank() && hasHoshiStorageMarker(path)
         }
         DictionaryStorageImportOutcome(
             success = result.success,
@@ -75,7 +75,7 @@ class HoshiDictionaryStore(
         sampleExpression: String?,
     ): Boolean = withContext(Dispatchers.IO) {
         if (sampleExpression.isNullOrBlank()) {
-            return@withContext File(storagePath, ".hoshidicts_1").exists()
+            return@withContext hasHoshiStorageMarker(storagePath)
         }
 
         val handle = hoshi.createLookupObject()
@@ -109,6 +109,35 @@ class HoshiDictionaryStore(
             allowedDictionaryIds = dictionaryIds.toSet(),
             state = state,
         )
+    }
+
+    override suspend fun getTermMeta(
+        expressions: List<String>,
+        dictionaryIds: List<Long>,
+    ): Map<String, List<DictionaryTermMeta>> = withContext(Dispatchers.IO) {
+        if (expressions.isEmpty()) return@withContext emptyMap()
+        if (dictionaryIds.isEmpty()) {
+            return@withContext expressions.associateWith { emptyList() }
+        }
+
+        val state = ensureSession()
+        if (state.handle == 0L) {
+            return@withContext expressions.associateWith { emptyList() }
+        }
+
+        val allowedDictionaryIds = dictionaryIds.toSet()
+        expressions.associateWith { expression ->
+            hoshi.queryExact(state.handle, expression)
+                .toList()
+                .flatMap { termResult ->
+                    buildMetaByDictionaryId(
+                        termResult = termResult,
+                        allowedDictionaryIds = allowedDictionaryIds,
+                        state = state,
+                    ).values.flatten()
+                }
+                .distinctBy(::metaKey)
+        }
     }
 
     override suspend fun lookup(
@@ -149,7 +178,7 @@ class HoshiDictionaryStore(
                 it.backend == DictionaryBackend.HOSHI &&
                     it.storageReady &&
                     !it.storagePath.isNullOrBlank() &&
-                    File(it.storagePath!!, ".hoshidicts_1").exists()
+                    hasHoshiStorageMarker(it.storagePath!!)
             }
             .sortedWith(compareBy<Dictionary> { it.priority }.thenBy { it.title })
 
@@ -233,7 +262,7 @@ class HoshiDictionaryStore(
                     reading = termResult.reading,
                     definitionTags = glossaryEntry.definitionTags.ifBlank { null },
                     rules = termResult.rules.ifBlank { null },
-                    score = 0,
+                    score = termResult.score,
                     glossary = parseGlossary(glossaryEntry.glossary),
                     sequence = null,
                     termTags = glossaryEntry.termTags.ifBlank { null },
@@ -370,5 +399,13 @@ class HoshiDictionaryStore(
 
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
+
+        private fun metaKey(meta: DictionaryTermMeta): String {
+            return "${meta.dictionaryId}|${meta.expression}|${meta.mode}|${meta.data}"
+        }
+
+        private fun hasHoshiStorageMarker(path: String): Boolean {
+            return File(path, ".hoshidicts_1").exists() || File(path, ".hoshidicts_2").exists()
+        }
     }
 }
