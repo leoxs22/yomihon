@@ -41,6 +41,7 @@ import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
+import tachiyomi.core.common.util.system.Panel
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -67,6 +68,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private var pageView: View? = null
 
     private var config: Config? = null
+    private var pendingOnPageReadyDirection: Boolean? = null
 
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: ((Throwable?) -> Unit)? = null
@@ -103,23 +105,36 @@ open class ReaderPageImageView @JvmOverloads constructor(
         with(pageView as? SubsamplingScaleImageView) {
             if (this == null) return
             if (isReady) {
-                landscapeZoom(forward)
+                onPageReady(forward)
             } else {
-                setOnImageEventListener(
-                    object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
-                        override fun onReady() {
-                            setupZoom(config)
-                            landscapeZoom(forward)
-                            this@ReaderPageImageView.onImageLoaded()
-                        }
-
-                        override fun onImageLoadError(e: Exception) {
-                            onImageLoadError(e)
-                        }
-                    },
-                )
+                pendingOnPageReadyDirection = forward
             }
         }
+    }
+
+    protected open fun onPageReady(forward: Boolean) {
+        (pageView as? SubsamplingScaleImageView)?.landscapeZoom(forward)
+    }
+
+    fun zoomToPanel(panel: Panel): Boolean {
+        val view = pageView as? SubsamplingScaleImageView ?: return false
+        if (!view.isReady) return false
+
+        val scaleX = view.width.toFloat() / panel.rect.width().coerceAtLeast(1)
+        val scaleY = view.height.toFloat() / panel.rect.height().coerceAtLeast(1)
+        val targetScale = minOf(scaleX, scaleY) * 0.95f
+        val clampedScale = targetScale.coerceIn(view.minScale, view.maxScale)
+
+        view.animateScaleAndCenter(
+            clampedScale,
+            PointF(panel.rect.centerX().toFloat(), panel.rect.centerY().toFloat()),
+        )!!
+            .withDuration(400)
+            .withEasing(EASE_IN_OUT_QUAD)
+            .withInterruptible(true)
+            .start()
+
+        return true
     }
 
     private fun SubsamplingScaleImageView.landscapeZoom(forward: Boolean) {
@@ -285,7 +300,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
             object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                 override fun onReady() {
                     setupZoom(config)
-                    if (isVisibleOnScreen()) landscapeZoom(true)
+                    val direction = pendingOnPageReadyDirection
+                    pendingOnPageReadyDirection = null
+                    when {
+                        direction != null -> onPageReady(direction)
+                        isVisibleOnScreen() -> onPageReady(true)
+                    }
                     this@ReaderPageImageView.onImageLoaded()
                 }
 

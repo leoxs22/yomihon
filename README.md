@@ -34,6 +34,7 @@ Discover and read manga, webtoons, comics, and more – easier than ever on your
 <div align="left">
 
 * [OCR support](https://huggingface.co/bluolightning/manga-ocr-tflite) 
+* Experimental on-device panel detection support.
 * Partial Yomitan dictionary support.
 * Local reading of content.
 * A configurable reader with multiple viewers, reading directions and other settings.
@@ -49,6 +50,8 @@ Discover and read manga, webtoons, comics, and more – easier than ever on your
 ## Contributing
 
 [Code of conduct](./CODE_OF_CONDUCT.md) · [Contributing guide](./CONTRIBUTING.md)
+
+Model and dataset attribution for externally fetched ML assets is documented in [MODEL_ATTRIBUTION.md](./MODEL_ATTRIBUTION.md).
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 

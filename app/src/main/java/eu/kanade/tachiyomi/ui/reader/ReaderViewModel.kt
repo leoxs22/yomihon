@@ -59,6 +59,7 @@ import logcat.LogPriority
 import mihon.domain.ocr.exception.OcrException
 import mihon.domain.ocr.interactor.OcrProcessor
 import mihon.domain.ocr.repository.OcrRepository
+import mihon.domain.panel.repository.PanelDetectionRepository
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -261,6 +262,7 @@ class ReaderViewModel @JvmOverloads constructor(
         }
         // Already checks if resources are initialized
         Injekt.get<OcrRepository>().cleanup()
+        Injekt.get<PanelDetectionRepository>().cleanup()
         super.onCleared()
     }
 
