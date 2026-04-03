@@ -73,10 +73,15 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
+import eu.kanade.domain.dictionary.DictionaryPreferences
+import eu.kanade.domain.dictionary.OcrResultPresentation
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.presentation.more.settings.PreferenceItem
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.tachiyomi.ui.setting.dictionary.DictionarySettingsScreenModel
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.delay
 import mihon.domain.dictionary.model.Dictionary
 import mihon.domain.dictionary.model.DictionaryMigrationState
@@ -85,9 +90,12 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.TextButton
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
 
 object SettingsDictionaryScreen : Screen {
 
@@ -100,6 +108,15 @@ object SettingsDictionaryScreen : Screen {
         val state by screenModel.state.collectAsState()
         val snackbarHostState = remember { SnackbarHostState() }
         val lazyListState = rememberLazyListState()
+        val dictionaryPreferences = remember { Injekt.get<DictionaryPreferences>() }
+        val ocrResultPresentationPref = remember(dictionaryPreferences) {
+            dictionaryPreferences.ocrResultPresentation()
+        }
+        val ocrResultPresentation by ocrResultPresentationPref.collectPreferenceAsState()
+        val ocrResultPreferences = rememberOcrResultPreferences(
+            dictionaryPreferences = dictionaryPreferences,
+            isPopup = ocrResultPresentation == OcrResultPresentation.POPUP,
+        )
 
         // File picker for dictionary import
         val pickDictionary = rememberLauncherForActivityResult(
@@ -165,6 +182,12 @@ object SettingsDictionaryScreen : Screen {
             ) {
                 item {
                     // Spacer for top padding
+                }
+
+                item {
+                    OcrResultPreferenceGroup(
+                        preferences = ocrResultPreferences,
+                    )
                 }
 
                 // Recommended Dictionaries
@@ -496,6 +519,94 @@ object SettingsDictionaryScreen : Screen {
                 item {
                     // Spacer for bottom padding (fab overlap etc if needed, or just visual breathing room)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberOcrResultPreferences(
+    dictionaryPreferences: DictionaryPreferences,
+    isPopup: Boolean,
+): List<Preference.PreferenceItem<out Any>> {
+    val popupWidthPref = remember(dictionaryPreferences) { dictionaryPreferences.ocrResultPopupWidthDp() }
+    val popupWidth by popupWidthPref.collectPreferenceAsState()
+
+    val popupHeightPref = remember(dictionaryPreferences) { dictionaryPreferences.ocrResultPopupHeightDp() }
+    val popupHeight by popupHeightPref.collectPreferenceAsState()
+
+    val popupScalePref = remember(dictionaryPreferences) { dictionaryPreferences.ocrResultPopupScalePercent() }
+    val popupScale by popupScalePref.collectPreferenceAsState()
+
+    return listOf(
+        Preference.PreferenceItem.ListPreference(
+            preference = dictionaryPreferences.ocrResultPresentation(),
+            entries = persistentMapOf(
+                OcrResultPresentation.SHEET to stringResource(MR.strings.pref_dictionary_ocr_result_presentation_sheet),
+                OcrResultPresentation.POPUP to stringResource(MR.strings.pref_dictionary_ocr_result_presentation_popup),
+            ),
+            title = stringResource(MR.strings.pref_dictionary_ocr_result_presentation),
+            subtitle = stringResource(MR.strings.pref_dictionary_ocr_result_presentation_summary),
+        ),
+        Preference.PreferenceItem.SliderPreference(
+            value = popupWidth,
+            valueRange = 240..520 step 20,
+            title = stringResource(MR.strings.pref_dictionary_ocr_result_popup_width),
+            subtitle = stringResource(MR.strings.pref_dictionary_ocr_result_popup_width_value, popupWidth),
+            enabled = isPopup,
+            onValueChanged = {
+                popupWidthPref.set(it)
+                true
+            },
+        ),
+        Preference.PreferenceItem.SliderPreference(
+            value = popupHeight,
+            valueRange = 180..640 step 20,
+            title = stringResource(MR.strings.pref_dictionary_ocr_result_popup_height),
+            subtitle = stringResource(MR.strings.pref_dictionary_ocr_result_popup_height_value, popupHeight),
+            enabled = isPopup,
+            onValueChanged = {
+                popupHeightPref.set(it)
+                true
+            },
+        ),
+        Preference.PreferenceItem.SliderPreference(
+            value = popupScale,
+            valueRange = 60..140 step 5,
+            title = stringResource(MR.strings.pref_dictionary_ocr_result_popup_scale),
+            subtitle = stringResource(MR.strings.pref_dictionary_ocr_result_popup_scale_value, popupScale),
+            enabled = isPopup,
+            onValueChanged = {
+                popupScalePref.set(it)
+                true
+            },
+        ),
+        Preference.PreferenceItem.SwitchPreference(
+            preference = dictionaryPreferences.ocrResultDimBackground(),
+            title = stringResource(MR.strings.pref_dictionary_ocr_result_dim_background),
+            subtitle = stringResource(MR.strings.pref_dictionary_ocr_result_dim_background_summary),
+        ),
+    )
+}
+
+@Composable
+private fun OcrResultPreferenceGroup(
+    preferences: List<Preference.PreferenceItem<out Any>>,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column {
+            eu.kanade.presentation.more.settings.widget.PreferenceGroupHeader(
+                title = stringResource(MR.strings.pref_category_dictionary_ocr_results),
+            )
+            preferences.forEach { item ->
+                PreferenceItem(
+                    item = item,
+                    highlightKey = null,
+                )
             }
         }
     }
