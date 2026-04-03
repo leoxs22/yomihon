@@ -26,6 +26,8 @@ import eu.kanade.domain.track.interactor.AddTracks
 import eu.kanade.domain.track.interactor.RefreshTracks
 import eu.kanade.domain.track.interactor.SyncChapterProgressWithTrack
 import eu.kanade.domain.track.interactor.TrackChapter
+import eu.kanade.tachiyomi.data.dictionary.audio.DictionaryAudioPlayerImpl
+import eu.kanade.tachiyomi.data.dictionary.audio.DictionaryAudioRepositoryImpl
 import eu.kanade.tachiyomi.data.ocr.OcrChapterScanner
 import eu.kanade.tachiyomi.data.ocr.OcrPageSourceGateway
 import eu.kanade.tachiyomi.data.ocr.OcrPageSourceGatewayImpl
@@ -46,6 +48,8 @@ import mihon.domain.ankidroid.interactor.AddDictionaryCard
 import mihon.domain.ankidroid.interactor.FindExistingAnkiNotes
 import mihon.domain.ankidroid.repository.AnkiDroidRepository
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
+import mihon.domain.dictionary.audio.DictionaryAudioPlayer
+import mihon.domain.dictionary.audio.DictionaryAudioRepository
 import mihon.domain.dictionary.interactor.DictionaryInteractor
 import mihon.domain.dictionary.interactor.SearchDictionaryTerms
 import mihon.domain.dictionary.repository.DictionaryLegacyRepository
@@ -268,6 +272,8 @@ class DomainModule : InjektModule {
         addSingletonFactory<DictionaryArchiveBuilder> { get<LegacyDictionaryArchiveBuilder>() }
         addFactory { DictionaryInteractor(get()) }
         addFactory { SearchDictionaryTerms(get(), get()) }
+        addSingletonFactory<DictionaryAudioRepository> { DictionaryAudioRepositoryImpl(get<Application>(), get()) }
+        addSingletonFactory<DictionaryAudioPlayer> { DictionaryAudioPlayerImpl() }
 
         addSingletonFactory { AnkiDroidPreferences(get()) }
         addSingletonFactory<AnkiDroidRepository> { AnkiDroidRepositoryImpl(get<Application>(), get()) }
