@@ -4,7 +4,9 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.util.isNotEmpty
 import com.ichi2.anki.FlashCardsContract
@@ -58,47 +60,10 @@ class AnkiDroidRepositoryImpl(
 
             val fieldMappings = ankiDroidPreferences.fieldMappings().get()
 
-            val pictureFilename = if (card.pictureUrl.isNotBlank()) {
-                try {
-                    val uri = card.pictureUrl.toUri()
+            val pictureFilename = importPicture(card.pictureUrl)
+            val audioFilename = importAudio(card.audio)
 
-                    AddContentApi.getAnkiDroidPackageName(appContext)?.let { packageName ->
-                        appContext.grantUriPermission(
-                            packageName,
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                        )
-                    }
-
-                    val mimeType = appContext.contentResolver.getType(uri)
-                    val extension = ImageUtil.getExtensionFromMimeType(mimeType) {
-                        appContext.contentResolver.openInputStream(uri)!!
-                    }
-                    val preferredName = "yomihon-${System.currentTimeMillis()}.$extension"
-
-                    // https://github.com/ankidroid/Anki-Android/issues/10335
-                    val contentValues = ContentValues()
-                    contentValues.put(FlashCardsContract.AnkiMedia.FILE_URI, uri.toString())
-                    contentValues.put(FlashCardsContract.AnkiMedia.PREFERRED_NAME, preferredName)
-
-                    val returnUri = appContext.contentResolver.insert(
-                        FlashCardsContract.AnkiMedia.CONTENT_URI,
-                        contentValues,
-                    )
-
-                    if (returnUri == null) {
-                        return@withContext AnkiDroidRepository.Result.Error()
-                    }
-
-                    returnUri.lastPathSegment ?: preferredName
-                } catch (e: Exception) {
-                    null
-                }
-            } else {
-                null
-            }
-
-            val fieldValues = buildFieldValues(card, modelFields, fieldMappings, pictureFilename)
+            val fieldValues = buildFieldValues(card, modelFields, fieldMappings, pictureFilename, audioFilename)
 
             val added = api.addNote(modelId, deckId, fieldValues, card.tags)
 
@@ -153,6 +118,7 @@ class AnkiDroidRepositoryImpl(
         modelFields: List<String>,
         fieldMappings: Map<String, String>,
         pictureFilename: String?,
+        audioFilename: String?,
     ): Array<String> {
         return modelFields.map { noteField ->
             val appField = fieldMappings[noteField]
@@ -162,6 +128,8 @@ class AnkiDroidRepositoryImpl(
                 } else {
                     ""
                 }
+            } else if (appField == "audio") {
+                audioFilename?.let { "[sound:$it]" }.orEmpty()
             } else if (appField == "furigana") {
                 if (card.reading.isNotBlank() && card.reading != card.expression) {
                     "<ruby>${card.expression}<rt>${card.reading}</rt></ruby>"
@@ -174,6 +142,67 @@ class AnkiDroidRepositoryImpl(
                 ""
             }
         }.toTypedArray()
+    }
+
+    private fun importPicture(pictureUrl: String): String? {
+        if (pictureUrl.isBlank()) return null
+        return runCatching {
+            val uri = pictureUrl.toUri()
+            val mimeType = appContext.contentResolver.getType(uri)
+            val extension = ImageUtil.getExtensionFromMimeType(mimeType) {
+                appContext.contentResolver.openInputStream(uri)!!
+            }
+            importMedia(
+                uri = uri.toString(),
+                preferredName = "yomihon-${System.currentTimeMillis()}.$extension",
+            )
+        }.getOrNull()
+    }
+
+    private fun importAudio(audioPath: String): String? {
+        if (audioPath.isBlank()) return null
+        return runCatching {
+            val file = java.io.File(audioPath)
+            if (!file.isFile) return@runCatching null
+            val extension = file.extension.ifBlank { "mp3" }
+            val uri = file.getUriCompat()
+            importMedia(
+                uri = uri.toString(),
+                preferredName = "yomihon-audio-${System.currentTimeMillis()}.$extension",
+            )
+        }.getOrNull()
+    }
+
+    private fun importMedia(
+        uri: String,
+        preferredName: String,
+    ): String? {
+        AddContentApi.getAnkiDroidPackageName(appContext)?.let { packageName ->
+            appContext.grantUriPermission(
+                packageName,
+                uri.toUri(),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+
+        val contentValues = ContentValues()
+        contentValues.put(FlashCardsContract.AnkiMedia.FILE_URI, uri)
+        contentValues.put(FlashCardsContract.AnkiMedia.PREFERRED_NAME, preferredName)
+
+        val returnUri = appContext.contentResolver.insert(
+            FlashCardsContract.AnkiMedia.CONTENT_URI,
+            contentValues,
+        ) ?: return null
+
+        return returnUri.lastPathSegment ?: preferredName
+    }
+
+    private fun java.io.File.getUriCompat(): Uri {
+        return FileProvider.getUriForFile(
+            appContext,
+            appContext.packageName + ".provider",
+            this,
+        )
     }
 
     override suspend fun getDecks(): Map<Long, String> = withContext(Dispatchers.IO) {

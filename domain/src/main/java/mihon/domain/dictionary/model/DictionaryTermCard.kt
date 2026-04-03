@@ -14,6 +14,7 @@ data class DictionaryTermCard(
     val expression: String,
     val reading: String,
     val sentence: String = "",
+    val audio: String = "",
     val pitchAccent: String = "",
     val frequency: String = "",
     val pictureUrl: String = "",
@@ -42,6 +43,7 @@ data class DictionaryTermCard(
         fieldName == "glossary" || fieldName == "glossary-first" -> glossaryFirst
         fieldName == "glossary-all" -> glossaryAll
         fieldName == "sentence" -> sentence
+        fieldName == "audio" -> audio
         fieldName == "pitchAccent" -> pitchAccent
         fieldName == "frequency" -> frequency
         fieldName == "picture" -> pictureUrl
@@ -73,6 +75,7 @@ fun createGroupedTermCard(
     dictionaries: List<Dictionary>,
     glossaryHtml: GlossaryHtmlBundle,
     sentence: String = "",
+    audio: String = "",
     pitchAccent: String = "",
     frequency: String = "",
     pictureUrl: String = "",
@@ -96,6 +99,7 @@ fun createGroupedTermCard(
         glossaryAll = glossaryHtml.all,
         glossaryByDictionary = glossaryHtml.byDictionary,
         sentence = sentence,
+        audio = audio,
         pitchAccent = pitchAccent,
         frequency = frequency,
         pictureUrl = pictureUrl,

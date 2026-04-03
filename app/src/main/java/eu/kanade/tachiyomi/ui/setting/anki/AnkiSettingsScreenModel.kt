@@ -10,6 +10,7 @@ import logcat.LogPriority
 import mihon.domain.ankidroid.repository.AnkiDroidRepository
 import mihon.domain.dictionary.interactor.DictionaryInteractor
 import mihon.domain.dictionary.model.Dictionary
+import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.ankidroid.service.AnkiDroidPreferences
 import tachiyomi.i18n.MR
@@ -206,6 +207,10 @@ class AnkiSettingsScreenModel(
         }
     }
 
+    fun audioPrefillPreference(): Preference<Boolean> {
+        return ankiDroidPreferences.dictionaryAudioPrefill()
+    }
+
     fun clearError() {
         mutableState.update { it.copy(error = null) }
     }
@@ -231,6 +236,7 @@ class AnkiSettingsScreenModel(
 
     companion object {
         val APP_FIELDS = listOf(
+            "audio",
             "expression",
             "frequency",
             "freqAvgValue",

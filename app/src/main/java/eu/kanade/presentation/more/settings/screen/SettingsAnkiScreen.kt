@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -95,6 +96,18 @@ object SettingsAnkiScreen : SearchableSettings {
 
         if (state.isApiAvailable && state.hasPermission) {
             preferences.add(getDeckNoteConfig(state, screenModel))
+            preferences.add(
+                Preference.PreferenceGroup(
+                    title = stringResource(MR.strings.anki_audio_settings),
+                    preferenceItems = listOf(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = remember(screenModel) { screenModel.audioPrefillPreference() },
+                            title = stringResource(MR.strings.anki_dictionary_audio_prefill),
+                            subtitle = stringResource(MR.strings.anki_dictionary_audio_prefill_summary),
+                        ),
+                    ).toImmutableList(),
+                ),
+            )
 
             if (state.selectedModelId > 0 && state.modelFields.isNotEmpty()) {
                 preferences.add(getFieldMappingGroup(state, screenModel))
@@ -177,6 +190,7 @@ object SettingsAnkiScreen : SearchableSettings {
 
         // Static field labels
         val appFieldResources = mapOf(
+            "audio" to MR.strings.anki_field_audio,
             "expression" to MR.strings.anki_field_expression,
             "frequency" to MR.strings.anki_field_frequency,
             "freqAvgValue" to MR.strings.anki_field_frequency_average_value,
