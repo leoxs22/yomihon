@@ -687,6 +687,7 @@ class ReaderActivity : BaseActivity() {
                                     dictionarySearchScreenModel.addGroupToAnki(terms, uri)
                                 }
                             },
+                            onPlayAudioClick = dictionarySearchScreenModel::fetchAndPlayAudio,
                         )
                     }
                     null -> {}

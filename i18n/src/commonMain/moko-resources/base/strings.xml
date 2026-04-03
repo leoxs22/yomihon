@@ -1161,8 +1161,12 @@
     <string name="anki_deck_name">Deck name</string>
     <string name="anki_note_type_selection">Note Type Selection</string>
     <string name="anki_note_type_name">Note type name</string>
+    <string name="anki_audio_settings">Audio</string>
+    <string name="anki_dictionary_audio_prefill">Prefill dictionary audio</string>
+    <string name="anki_dictionary_audio_prefill_summary">Attach fetched dictionary audio to Anki exports when available.</string>
     <string name="anki_field_mappings">Field Mappings</string>
     <string name="anki_field_empty">Empty</string>
+    <string name="anki_field_audio">Audio</string>
     <string name="anki_field_reading">Reading</string>
     <string name="anki_field_furigana">Furigana</string>
     <string name="anki_field_expression">Expression</string>
@@ -1192,6 +1196,7 @@
     <string name="action_ocr">Trigger region selection for text recognition</string>
     <string name="action_preprocess_ocr">Scan OCR</string>
     <string name="action_copy">Copy</string>
+    <string name="action_play_audio">Play audio</string>
     <string name="ocr_select_region">Drag to select text region</string>
     <string name="ocr_processing">Processing OCR…</string>
     <string name="ocr_queue_header">Text recognition queue</string>
@@ -1207,6 +1212,10 @@
     <string name="pref_dictionary_ocr_result_presentation_summary">Choose how OCR dictionary results open in the reader.</string>
     <string name="pref_dictionary_ocr_result_presentation_sheet">Bottom sheet</string>
     <string name="pref_dictionary_ocr_result_presentation_popup">Popup</string>
+    <string name="dictionary_audio_not_found">No pronunciation audio found for this term</string>
+    <string name="dictionary_audio_fetch_failed">Failed to fetch pronunciation audio</string>
+    <string name="dictionary_audio_play_failed">Failed to play pronunciation audio</string>
+    <string name="dictionary_audio_export_skipped">Exported without audio because no pronunciation audio was available</string>
     <string name="pref_dictionary_ocr_result_popup_width">Popup width</string>
     <string name="pref_dictionary_ocr_result_popup_width_value">%1$ddp</string>
     <string name="pref_dictionary_ocr_result_popup_height">Popup height</string>

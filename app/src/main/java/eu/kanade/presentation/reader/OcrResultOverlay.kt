@@ -31,6 +31,7 @@ fun OcrResultOverlay(
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onTermGroupClick: (List<DictionaryTerm>) -> Unit,
+    onPlayAudioClick: (List<DictionaryTerm>) -> Unit,
 ) {
     BackHandler(onBack = onDismissRequest)
 
@@ -55,6 +56,7 @@ fun OcrResultOverlay(
                     onQueryChange = onQueryChange,
                     onSearch = onSearch,
                     onTermGroupClick = onTermGroupClick,
+                    onPlayAudioClick = onPlayAudioClick,
                 )
             }
             else -> {
@@ -66,6 +68,7 @@ fun OcrResultOverlay(
                     onQueryChange = onQueryChange,
                     onSearch = onSearch,
                     onTermGroupClick = onTermGroupClick,
+                    onPlayAudioClick = onPlayAudioClick,
                 )
             }
         }

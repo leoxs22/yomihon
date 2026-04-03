@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LibraryAddCheck
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,6 +78,16 @@ data class TermGroup(
     val terms: List<DictionaryTerm>,
 )
 
+sealed interface DictionaryCardAudioState {
+    data object Idle : DictionaryCardAudioState
+
+    data object Loading : DictionaryCardAudioState
+
+    data object Ready : DictionaryCardAudioState
+
+    data object Error : DictionaryCardAudioState
+}
+
 /**
  * Unified component for displaying dictionary search results.
  * Handles loading, empty, no dictionaries, and results states.
@@ -94,7 +105,9 @@ fun DictionaryResults(
     enabledDictionaryIds: Set<Long>,
     termMetaMap: Map<String, List<DictionaryTermMeta>>,
     existingTermExpressions: Set<String> = emptySet(),
+    audioStates: Map<String, DictionaryCardAudioState> = emptyMap(),
     onTermGroupClick: (List<DictionaryTerm>) -> Unit,
+    onPlayAudioClick: (List<DictionaryTerm>) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onCopyText: (() -> Unit)? = null,
@@ -155,7 +168,9 @@ fun DictionaryResults(
                 dictionaries = dictionaries,
                 termMetaMap = termMetaMap,
                 existingTermExpressions = existingTermExpressions,
+                audioStates = audioStates,
                 onTermGroupClick = onTermGroupClick,
+                onPlayAudioClick = onPlayAudioClick,
                 onQueryChange = onQueryChange,
                 onSearch = onSearch,
                 onCopyText = onCopyText,
@@ -201,7 +216,9 @@ private fun SearchResultsList(
     dictionaries: List<Dictionary>,
     termMetaMap: Map<String, List<DictionaryTermMeta>>,
     existingTermExpressions: Set<String>,
+    audioStates: Map<String, DictionaryCardAudioState>,
     onTermGroupClick: (List<DictionaryTerm>) -> Unit,
+    onPlayAudioClick: (List<DictionaryTerm>) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onCopyText: (() -> Unit)? = null,
@@ -248,7 +265,9 @@ private fun SearchResultsList(
                 dictionaries = dictionaries,
                 termMeta = termMetaMap[group.expression] ?: emptyList(),
                 isDuplicatePending = group.expression in existingTermExpressions,
+                audioState = audioStates["${group.expression}|${group.reading}"] ?: DictionaryCardAudioState.Idle,
                 onClick = { onTermGroupClick(group.terms) },
+                onPlayAudioClick = { onPlayAudioClick(group.terms) },
                 onQueryChange = onQueryChange,
                 onSearch = onSearch,
             )
@@ -262,7 +281,9 @@ private fun GroupedTermCard(
     dictionaries: List<Dictionary>,
     termMeta: List<DictionaryTermMeta>,
     isDuplicatePending: Boolean,
+    audioState: DictionaryCardAudioState,
     onClick: () -> Unit,
+    onPlayAudioClick: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
 ) {
@@ -297,20 +318,45 @@ private fun GroupedTermCard(
                         )
                     }
                 }
-                IconButton(
-                    onClick = onClick,
+                Row(
                     modifier = Modifier.offset(x = 8.dp, y = (-8).dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val (icon, tint) = if (isDuplicatePending) {
-                        Icons.Default.LibraryAddCheck to MaterialTheme.colorScheme.primary
-                    } else {
-                        Icons.Default.Add to MaterialTheme.colorScheme.onSurfaceVariant
+                    IconButton(
+                        onClick = onPlayAudioClick,
+                        enabled = audioState != DictionaryCardAudioState.Loading,
+                    ) {
+                        if (audioState == DictionaryCardAudioState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = stringResource(MR.strings.action_play_audio),
+                                tint = if (audioState == DictionaryCardAudioState.Error) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = stringResource(MR.strings.action_add),
-                        tint = tint,
-                    )
+                    IconButton(
+                        onClick = onClick,
+                    ) {
+                        val (icon, tint) = if (isDuplicatePending) {
+                            Icons.Default.LibraryAddCheck to MaterialTheme.colorScheme.primary
+                        } else {
+                            Icons.Default.Add to MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = stringResource(MR.strings.action_add),
+                            tint = tint,
+                        )
+                    }
                 }
             }
 

@@ -56,6 +56,7 @@ data object DictionaryTab : Tab {
             onTermGroupClick = { terms ->
                 screenModel.addGroupToAnki(terms)
             },
+            onPlayAudioClick = screenModel::fetchAndPlayAudio,
             onOpenDictionarySettings = {
                 navigator.push(SettingsScreen(SettingsScreen.Destination.Dictionary))
             },

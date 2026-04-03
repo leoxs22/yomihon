@@ -44,6 +44,7 @@ fun OcrResultPopup(
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     onTermGroupClick: (List<DictionaryTerm>) -> Unit,
+    onPlayAudioClick: (List<DictionaryTerm>) -> Unit,
 ) {
     LaunchedEffect(text) {
         if (text.isNotBlank()) {
@@ -152,7 +153,9 @@ fun OcrResultPopup(
                             enabledDictionaryIds = searchState.enabledDictionaryIds.toSet(),
                             termMetaMap = searchState.results?.termMetaMap ?: emptyMap(),
                             existingTermExpressions = searchState.existingTermExpressions,
+                            audioStates = searchState.audioStates,
                             onTermGroupClick = onTermGroupClick,
+                            onPlayAudioClick = onPlayAudioClick,
                             onQueryChange = onQueryChange,
                             onSearch = onSearch,
                             onCopyText = onCopyText,
