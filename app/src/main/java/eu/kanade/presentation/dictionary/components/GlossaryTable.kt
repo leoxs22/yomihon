@@ -23,7 +23,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.turtlekazu.furiganable.compose.m3.TextWithReading
 import mihon.domain.dictionary.css.ParsedCss
 import mihon.domain.dictionary.css.getCssStyles
 import mihon.domain.dictionary.model.GlossaryNode
@@ -153,7 +152,7 @@ private fun TableCellNode(
                         }
                     }
                 } else if (cellContent.isNotBlank()) {
-                    TextWithReading(
+                    DictTextWithReading(
                         formattedText = cellContent,
                         style = textStyle,
                         furiganaFontSize = textStyle.fontSize * 0.60f,
@@ -163,7 +162,7 @@ private fun TableCellNode(
                 }
             }
             cellContent.isNotBlank() -> {
-                TextWithReading(
+                DictTextWithReading(
                     formattedText = cellContent,
                     style = textStyle,
                     furiganaFontSize = textStyle.fontSize * 0.60f,

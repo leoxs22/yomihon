@@ -18,15 +18,16 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.dictionary.components.DictResultContentScale
 import eu.kanade.presentation.dictionary.components.DictionaryResults
 import eu.kanade.presentation.dictionary.components.SearchBar
 import eu.kanade.tachiyomi.ui.dictionary.DictionarySearchScreenModel
@@ -68,8 +69,13 @@ fun OcrResultPopup(
         val popupWidthDp = with(density) { popupWidthPx.toDp() }
         val popupHeightDp = with(density) { popupHeightPx.toDp() }
         val contentScale = settings.contentScale.coerceAtLeast(0.1f)
-        val contentWidthDp = with(density) { (popupWidthPx / contentScale).toDp() }
-        val contentHeightDp = with(density) { (popupHeightPx / contentScale).toDp() }
+        val scaledDensity =
+            remember(density, contentScale) {
+                Density(
+                    density = density.density * contentScale,
+                    fontScale = density.fontScale,
+                )
+            }
 
         val placement =
             remember(anchorRect, popupWidthPx, popupHeightPx, viewportWidthPx, viewportHeightPx, gapPx, marginPx) {
@@ -117,50 +123,48 @@ fun OcrResultPopup(
                         .fillMaxSize()
                         .clipToBounds(),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .width(contentWidthDp)
-                            .height(contentHeightDp)
-                            .graphicsLayer(
-                                scaleX = contentScale,
-                                scaleY = contentScale,
-                                transformOrigin = TransformOrigin(0f, 0f),
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    CompositionLocalProvider(
+                        LocalDensity provides scaledDensity,
+                        DictResultContentScale provides contentScale,
                     ) {
-                        SearchBar(
-                            query = searchState.query,
-                            onQueryChange = onQueryChange,
-                            onSearch = { onSearch(searchState.query) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            SearchBar(
+                                query = searchState.query,
+                                onQueryChange = onQueryChange,
+                                onSearch = { onSearch(searchState.query) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                            )
 
-                        HorizontalDivider()
+                            HorizontalDivider()
 
-                        DictionaryResults(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            query = searchState.results?.query ?: "",
-                            highlightRange = searchState.results?.highlightRange,
-                            isLoading = searchState.isLoading,
-                            isSearching = searchState.isSearching,
-                            hasSearched = searchState.hasSearched,
-                            searchResults = searchState.results?.items ?: emptyList(),
-                            dictionaries = searchState.dictionaries,
-                            enabledDictionaryIds = searchState.enabledDictionaryIds.toSet(),
-                            termMetaMap = searchState.results?.termMetaMap ?: emptyMap(),
-                            existingTermExpressions = searchState.existingTermExpressions,
-                            audioStates = searchState.audioStates,
-                            onTermGroupClick = onTermGroupClick,
-                            onPlayAudioClick = onPlayAudioClick,
-                            onQueryChange = onQueryChange,
-                            onSearch = onSearch,
-                            onCopyText = onCopyText,
-                            contentPadding = PaddingValues(8.dp),
-                        )
+                            DictionaryResults(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                query = searchState.results?.query ?: "",
+                                highlightRange = searchState.results?.highlightRange,
+                                isLoading = searchState.isLoading,
+                                isSearching = searchState.isSearching,
+                                hasSearched = searchState.hasSearched,
+                                searchResults = searchState.results?.items ?: emptyList(),
+                                dictionaries = searchState.dictionaries,
+                                enabledDictionaryIds = searchState.enabledDictionaryIds.toSet(),
+                                termMetaMap = searchState.results?.termMetaMap ?: emptyMap(),
+                                existingTermExpressions = searchState.existingTermExpressions,
+                                audioStates = searchState.audioStates,
+                                onTermGroupClick = onTermGroupClick,
+                                onPlayAudioClick = onPlayAudioClick,
+                                onQueryChange = onQueryChange,
+                                onSearch = onSearch,
+                                onCopyText = onCopyText,
+                                contentPadding = PaddingValues(8.dp),
+                            )
+                        }
                     }
                 }
             }
