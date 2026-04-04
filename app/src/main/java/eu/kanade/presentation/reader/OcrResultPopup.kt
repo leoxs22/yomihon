@@ -3,7 +3,6 @@ package eu.kanade.presentation.reader
 import android.graphics.RectF
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -29,7 +27,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.dictionary.components.DictResultContentScale
 import eu.kanade.presentation.dictionary.components.DictionaryResults
-import eu.kanade.presentation.dictionary.components.SearchBar
 import eu.kanade.tachiyomi.ui.dictionary.DictionarySearchScreenModel
 import mihon.domain.dictionary.model.DictionaryTerm
 import kotlin.math.roundToInt
@@ -129,19 +126,7 @@ fun OcrResultPopup(
                     ) {
                         Column(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            SearchBar(
-                                query = searchState.query,
-                                onQueryChange = onQueryChange,
-                                onSearch = { onSearch(searchState.query) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                            )
-
-                            HorizontalDivider()
-
                             DictionaryResults(
                                 modifier = Modifier
                                     .fillMaxWidth()
