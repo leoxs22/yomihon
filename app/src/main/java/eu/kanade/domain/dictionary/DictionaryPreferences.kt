@@ -33,12 +33,12 @@ class DictionaryPreferences(
 
     fun ocrResultPopupHeightDp() = preferenceStore.getInt(
         key = "pref_dictionary_ocr_result_popup_height_dp",
-        defaultValue = 400,
+        defaultValue = 350,
     )
 
     fun ocrResultPopupScalePercent() = preferenceStore.getInt(
         key = "pref_dictionary_ocr_result_popup_scale_percent",
-        defaultValue = 100,
+        defaultValue = 95,
     )
 
     fun ocrResultDimBackground() = preferenceStore.getBoolean(
