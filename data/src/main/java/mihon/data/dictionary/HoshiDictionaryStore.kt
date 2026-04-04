@@ -34,7 +34,6 @@ class HoshiDictionaryStore(
     private val dictionaryRepository: DictionaryRepository,
     private val dictionaryParser: DictionaryParser,
 ) : DictionarySearchBackend, DictionaryStorageGateway {
-
     private val hoshi = HoshiDicts()
     private val rebuildMutex = Mutex()
     private val dirty = AtomicBoolean(true)
@@ -130,6 +129,8 @@ class HoshiDictionaryStore(
         expressions.associateWith { expression ->
             hoshi.queryExact(state.handle, expression)
                 .toList()
+                .asSequence()
+                .filter { it.expression == expression }
                 .flatMap { termResult ->
                     buildMetaByDictionaryId(
                         termResult = termResult,
@@ -138,6 +139,7 @@ class HoshiDictionaryStore(
                     ).values.flatten()
                 }
                 .distinctBy(::metaKey)
+                .toList()
         }
     }
 
