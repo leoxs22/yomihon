@@ -999,18 +999,22 @@ class ReaderActivity : BaseActivity() {
             return
         }
 
-        val anchorRect = selection.anchorRectOnScreen?.let(::screenRectToDialogRootRect) ?: return
-        if (activeOcrOverlaySession?.matches(selection) == true) {
-            dismissActiveOcrOverlaySession()
-            return
-        }
+        if (dictionaryPreferences.ocrResultPresentation().get() == OcrResultPresentation.POPUP) {
+            val anchorRect = selection.anchorRectOnScreen?.let(::screenRectToDialogRootRect) ?: return
+            if (activeOcrOverlaySession?.matches(selection) == true) {
+                dismissActiveOcrOverlaySession()
+                return
+            }
 
-        activeOcrOverlaySession = ActiveOcrOverlaySession(
-            selection = selection,
-            anchorRectInDialogRoot = anchorRect,
-        )
-        if (!syncActiveOcrOverlay()) {
-            return
+            activeOcrOverlaySession = ActiveOcrOverlaySession(
+                selection = selection,
+                anchorRectInDialogRoot = anchorRect,
+            )
+            if (!syncActiveOcrOverlay()) {
+                return
+            }
+        } else {
+            clearActiveOcrOverlaySession()
         }
 
         viewModel.showOcrResult(
@@ -1021,7 +1025,7 @@ class ReaderActivity : BaseActivity() {
     }
 
     fun shouldHandleCachedOcrRegionTaps(): Boolean {
-        return dictionaryPreferences.ocrResultPresentation().get() == OcrResultPresentation.POPUP
+        return true
     }
 
     fun hasActiveOcrOverlaySession(): Boolean {
