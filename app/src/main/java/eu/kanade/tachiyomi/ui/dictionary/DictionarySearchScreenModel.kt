@@ -337,7 +337,6 @@ class DictionarySearchScreenModel(
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to play dictionary audio" }
                 markAudioState(expression, reading, DictionaryCardAudioState.Error)
-                _events.send(Event.ShowError(UiMessage.Resource(MR.strings.dictionary_audio_play_failed)))
             }
         }
     }
@@ -347,9 +346,6 @@ class DictionarySearchScreenModel(
         reading: String,
     ): DictionaryAudio? {
         val audio = ensureAudio(expression, reading, showFailure = false)
-        if (audio == null) {
-            _events.send(Event.ShowMessage(UiMessage.Resource(MR.strings.dictionary_audio_export_skipped)))
-        }
         return audio
     }
 
@@ -377,17 +373,11 @@ class DictionarySearchScreenModel(
             }
             DictionaryAudioResult.NotFound -> {
                 markAudioState(expression, reading, DictionaryCardAudioState.Error)
-                if (showFailure) {
-                    _events.send(Event.ShowMessage(UiMessage.Resource(MR.strings.dictionary_audio_not_found)))
-                }
                 null
             }
             is DictionaryAudioResult.Error -> {
                 logcat(LogPriority.ERROR, result.throwable) { "Failed to fetch dictionary audio" }
                 markAudioState(expression, reading, DictionaryCardAudioState.Error)
-                if (showFailure) {
-                    _events.send(Event.ShowError(UiMessage.Resource(MR.strings.dictionary_audio_fetch_failed)))
-                }
                 null
             }
         }
