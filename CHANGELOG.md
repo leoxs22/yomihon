@@ -10,6 +10,26 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - `Fixed` - for any bug fixes.
 - `Other` - for technical stuff.
 
+## [v0.2.5] - 2026-04-05
+
+### Added
+- Dictionary results as a popup mode for pre-scanned chapters
+  - Requires clearing the scanned chapter cache (sorry)
+  - Allows for one-tap dictionary lookups of any word
+- Setting toggle for darkening the reader when the dictionary is open
+- Audio button for dictionary terms and Anki export
+
+### Improved
+- Improve ruby format for exported Anki cards
+
+### Changed
+- Default Anki card format no longer center aligns glossary
+- Group dictionary results with the same expression
+
+### Fixed
+- Fix some incorrect dictionary styling
+- Fix extra pitch and term info for dictionary searches
+
 ## [v0.2.4] - 2026-03-31
 
 ### Added
@@ -102,8 +122,9 @@ The format is a modified version of [Keep a Changelog](https://keepachangelog.co
 - The full changelog for Mihon releases is available in their [repository](https://github.com/mihonapp/mihon/blob/main/CHANGELOG.md).
 
 
-[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.4...main
-[v0.2.3]: https://github.com/yomihon/yomihon/compare/v0.2.2...v0.2.4
+[unreleased]: https://github.com/yomihon/yomihon/compare/v0.2.5...main
+[v0.2.5]: https://github.com/yomihon/yomihon/compare/v0.2.4...v0.2.5
+[v0.2.4]: https://github.com/yomihon/yomihon/compare/v0.2.2...v0.2.4
 [v0.2.2]: https://github.com/yomihon/yomihon/compare/v0.2.1...v0.2.2
 [v0.2.1]: https://github.com/yomihon/yomihon/compare/v0.2.0...v0.2.1
 [v0.2.0]: https://github.com/yomihon/yomihon/compare/v0.1.1...v0.2.0
