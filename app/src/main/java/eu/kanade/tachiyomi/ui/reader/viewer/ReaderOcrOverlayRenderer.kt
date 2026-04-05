@@ -58,6 +58,7 @@ internal class ReaderOcrOverlayRenderer(
     ): Boolean {
         return when (overlayLayout) {
             is ReaderOcrOverlayLayout.Horizontal -> {
+                applyTextPaint(overlayLayout)
                 overlayLayout.lines.any { line ->
                     val lineRight = line.left + measureText(line.text)
                     localY >= line.top - touchAllowancePx &&
@@ -85,6 +86,7 @@ internal class ReaderOcrOverlayRenderer(
 
         val displayOffset = when (overlayLayout) {
             is ReaderOcrOverlayLayout.Horizontal -> {
+                applyTextPaint(overlayLayout)
                 val line = overlayLayout.lines.minByOrNull { placedLine ->
                     val centerY = (placedLine.top + placedLine.bottom) / 2f
                     abs(centerY - localY)
@@ -115,7 +117,7 @@ internal class ReaderOcrOverlayRenderer(
     }
 
     private fun drawHorizontalText(canvas: Canvas, overlayLayout: ReaderOcrOverlayLayout.Horizontal) {
-        textPaint.textSize = overlayLayout.textSizePx
+        applyTextPaint(overlayLayout)
         overlayLayout.lines.forEach { line ->
             line.highlightSegments.forEach { segment ->
                 canvas.drawRect(segment, horizontalHighlightPaint)
@@ -127,6 +129,7 @@ internal class ReaderOcrOverlayRenderer(
 
     private fun drawVerticalText(canvas: Canvas, overlayLayout: ReaderOcrOverlayLayout.Vertical) {
         textPaint.textSize = overlayLayout.textSizePx
+        textPaint.letterSpacing = 0f
         overlayLayout.glyphs.forEach { glyph ->
             if (glyph.isHighlighted) {
                 canvas.drawRoundRect(glyph.rect, verticalHighlightRadiusPx, verticalHighlightRadiusPx, verticalHighlightPaint)
@@ -168,36 +171,55 @@ internal class ReaderOcrOverlayRenderer(
         textSizePx: Float,
     ): ReaderOcrOverlayLayout.Horizontal? {
         textPaint.textSize = textSizePx
+        textPaint.letterSpacing = 0f
         val fontMetrics = textPaint.fontMetrics
         val lineHeight = fontMetrics.bottom - fontMetrics.top
         if (lineHeight <= 0f) return null
 
-        val maxLineWidth = lines.maxOfOrNull(::measureText) ?: 0f
-        if (maxLineWidth > contentRect.width() || lineHeight > contentRect.height()) {
+        // Fit check with no letter spacing so the longest line fits naturally
+        val longestLine = lines.maxByOrNull { measureText(it) } ?: return null
+        val longestLineNaturalWidth = measureText(longestLine)
+        val totalTextHeight = lineHeight * lines.size
+        if (longestLineNaturalWidth > contentRect.width() || totalTextHeight > contentRect.height()) {
             return null
         }
 
-        val lineCount = lines.size.coerceAtLeast(1)
-        val lineTopStep = if (lineCount == 1) 0f else (contentRect.height() - lineHeight) / (lineCount - 1)
+        // Letter spacing (in em units) to make the longest line span the full width
+        val letterSpacingEm = if (longestLine.isNotEmpty() && longestLineNaturalWidth < contentRect.width()) {
+            (contentRect.width() - longestLineNaturalWidth) / (longestLine.length * textSizePx)
+        } else {
+            0f
+        }
+        textPaint.letterSpacing = letterSpacingEm
+
+        val centerLines = !hasCjk(displayText)
         val linePlacements = mutableListOf<HorizontalLinePlacement>()
         var displayOffset = 0
         lines.forEachIndexed { index, line ->
-            val lineTop = contentRect.top + (lineTopStep * index)
+            // Lines start from the top of the content rect
+            val lineTop = contentRect.top + (lineHeight * index)
             val lineBottom = lineTop + lineHeight
+            val lineWidth = measureText(line) // measured with letter spacing applied
+            // CJK: left-align; non-CJK: center each line within the content rect
+            val lineLeft = if (centerLines) {
+                contentRect.left + (contentRect.width() - lineWidth) / 2f
+            } else {
+                contentRect.left
+            }
             val highlightSegments = mutableListOf<RectF>()
 
             line.forEachIndexed { charIndex, _ ->
                 val charDisplayOffset = displayOffset + charIndex
                 if (highlightRange != null && charDisplayOffset in highlightRange.first until highlightRange.second) {
-                    val left = contentRect.left + measureText(line, 0, charIndex)
-                    val right = contentRect.left + measureText(line, 0, charIndex + 1)
+                    val left = lineLeft + measureText(line, 0, charIndex)
+                    val right = lineLeft + measureText(line, 0, charIndex + 1)
                     highlightSegments += RectF(left, lineTop, right, lineBottom)
                 }
             }
 
             linePlacements += HorizontalLinePlacement(
                 text = line,
-                left = contentRect.left,
+                left = lineLeft,
                 top = lineTop,
                 bottom = lineBottom,
                 baselineY = lineTop - fontMetrics.top,
@@ -216,6 +238,7 @@ internal class ReaderOcrOverlayRenderer(
             lines = linePlacements,
             displayText = displayText,
             textSizePx = textSizePx,
+            letterSpacingEm = letterSpacingEm,
         )
     }
 
@@ -253,6 +276,7 @@ internal class ReaderOcrOverlayRenderer(
         textSizePx: Float,
     ): ReaderOcrOverlayLayout.Vertical? {
         textPaint.textSize = textSizePx
+        textPaint.letterSpacing = 0f
         val fontMetrics = textPaint.fontMetrics
         val lineHeight = fontMetrics.bottom - fontMetrics.top
         if (lineHeight <= 0f) return null
@@ -280,29 +304,38 @@ internal class ReaderOcrOverlayRenderer(
             }
             lineData += VerticalLineData(
                 glyphs = glyphs,
-                lineWidth = glyphs.maxOfOrNull { it.glyphWidth }?.coerceAtLeast(textSizePx * 0.85f) ?: textSizePx * 0.85f,
+                lineWidth =
+                glyphs.maxOfOrNull { it.glyphWidth }?.coerceAtLeast(textSizePx * 0.85f) ?: textSizePx * 0.85f,
             )
             if (lineIndex < lines.lastIndex) {
                 displayOffset++
             }
         }
 
-        if (lineData.any { it.lineWidth > columnWidth } || lineHeight > contentRect.height()) {
+        val maxCharsInColumn = lineData.maxOfOrNull { it.glyphs.size } ?: 1
+        // Each CJK glyph nominally occupies ~1em square; lineHeight (~1.5em) is too tall.
+        // Use textSizePx as the cell height for tight, natural vertical packing.
+        val glyphCellHeight = textSizePx
+        if (lineData.any { it.lineWidth > columnWidth } || glyphCellHeight * maxCharsInColumn > contentRect.height()) {
             return null
         }
+
+        val glyphTopStep = glyphCellHeight
+        // Recompute baseline so text is vertically centered within the smaller cell.
+        // Standard centering: baseline = cellTop + (cellHeight - lineHeight)/2 - fontMetrics.top
+        val baselineOffsetInCell = (glyphCellHeight - lineHeight) / 2f - fontMetrics.top
 
         val placedGlyphs = mutableListOf<VerticalGlyphPlacement>()
         lineData.forEachIndexed { columnIndex, line ->
             val columnLeft = contentRect.right - ((columnIndex + 1) * columnWidth)
             val columnRight = columnLeft + columnWidth
-            val glyphTopStep = if (line.glyphs.size <= 1) 0f else (contentRect.height() - lineHeight) / (line.glyphs.size - 1)
             line.glyphs.forEach { glyph ->
                 val glyphTop = contentRect.top + (glyph.indexInColumn * glyphTopStep)
                 placedGlyphs += VerticalGlyphPlacement(
                     char = glyph.char,
                     displayOffset = glyph.displayOffset,
-                    rect = RectF(columnLeft, glyphTop, columnRight, glyphTop + lineHeight),
-                    baselineY = glyphTop - fontMetrics.top,
+                    rect = RectF(columnLeft, glyphTop, columnRight, glyphTop + glyphCellHeight),
+                    baselineY = glyphTop + baselineOffsetInCell,
                     isHighlighted = glyph.isHighlighted,
                 )
             }
@@ -317,10 +350,25 @@ internal class ReaderOcrOverlayRenderer(
         )
     }
 
+    private fun applyTextPaint(layout: ReaderOcrOverlayLayout.Horizontal) {
+        textPaint.textSize = layout.textSizePx
+        textPaint.letterSpacing = layout.letterSpacingEm
+    }
+
     private fun measureText(text: String): Float = textPaint.measureText(text)
 
     private fun measureText(text: String, start: Int, end: Int): Float {
         return textPaint.measureText(text, start, end)
+    }
+
+    private fun hasCjk(text: String): Boolean = text.any { c ->
+        val cp = c.code
+        // CJK Unified Ideographs, CJK Extension A/B, CJK Compatibility Ideographs,
+        // Hiragana, Katakana, Hangul Syllables, Hangul Jamo, Bopomofo
+        cp in 0x4E00..0x9FFF || cp in 0x3400..0x4DBF || cp in 0xF900..0xFAFF ||
+            cp in 0x3040..0x309F || cp in 0x30A0..0x30FF ||
+            cp in 0xAC00..0xD7AF || cp in 0x1100..0x11FF ||
+            cp in 0x3100..0x312F
     }
 }
 
@@ -335,6 +383,7 @@ internal sealed interface ReaderOcrOverlayLayout {
         val lines: List<HorizontalLinePlacement>,
         override val displayText: String,
         val textSizePx: Float,
+        val letterSpacingEm: Float,
     ) : ReaderOcrOverlayLayout
 
     data class Vertical(
