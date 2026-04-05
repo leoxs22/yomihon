@@ -26,6 +26,8 @@ import eu.kanade.presentation.dictionary.components.DictResultContentScale
 import eu.kanade.presentation.dictionary.components.DictionaryResults
 import eu.kanade.tachiyomi.ui.dictionary.DictionarySearchScreenModel
 import mihon.domain.dictionary.model.DictionaryTerm
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
@@ -46,14 +48,12 @@ fun OcrResultPopup(
         val gapPx = marginPx
         val viewportWidthPx = constraints.maxWidth.toFloat()
         val viewportHeightPx = constraints.maxHeight.toFloat()
-        val popupWidthPx = with(density) {
+        val preferredPopupWidthPx = with(density) {
             settings.widthDp.dp.toPx().coerceAtMost((viewportWidthPx - (marginPx * 2)).coerceAtLeast(1f))
         }
-        val popupHeightPx = with(density) {
+        val preferredPopupHeightPx = with(density) {
             settings.heightDp.dp.toPx().coerceAtMost((viewportHeightPx - (marginPx * 2)).coerceAtLeast(1f))
         }
-        val popupWidthDp = with(density) { popupWidthPx.toDp() }
-        val popupHeightDp = with(density) { popupHeightPx.toDp() }
         val contentScale = settings.contentScale.coerceAtLeast(0.1f)
         val scaledDensity =
             remember(density, contentScale) {
@@ -64,11 +64,11 @@ fun OcrResultPopup(
             }
 
         val placement =
-            remember(anchorRect, popupWidthPx, popupHeightPx, viewportWidthPx, viewportHeightPx, gapPx, marginPx) {
+            remember(anchorRect, preferredPopupWidthPx, preferredPopupHeightPx, viewportWidthPx, viewportHeightPx, gapPx, marginPx) {
                 calculatePopupPlacement(
                     anchorRect = anchorRect,
-                    popupWidthPx = popupWidthPx,
-                    popupHeightPx = popupHeightPx,
+                    preferredPopupWidthPx = preferredPopupWidthPx,
+                    preferredPopupHeightPx = preferredPopupHeightPx,
                     viewportWidthPx = viewportWidthPx,
                     viewportHeightPx = viewportHeightPx,
                     gapPx = gapPx,
@@ -89,8 +89,8 @@ fun OcrResultPopup(
         } else {
             Surface(
                 modifier = Modifier
-                    .width(popupWidthDp)
-                    .height(popupHeightDp)
+                    .width(with(density) { placement.width.toDp() })
+                    .height(with(density) { placement.height.toDp() })
                     .offset {
                         IntOffset(
                             placement.x.roundToInt(),
@@ -148,12 +148,14 @@ fun OcrResultPopup(
 internal data class PopupPlacement(
     val x: Float,
     val y: Float,
+    val width: Float,
+    val height: Float,
 )
 
 internal fun calculatePopupPlacement(
     anchorRect: RectF,
-    popupWidthPx: Float,
-    popupHeightPx: Float,
+    preferredPopupWidthPx: Float,
+    preferredPopupHeightPx: Float,
     viewportWidthPx: Float,
     viewportHeightPx: Float,
     gapPx: Float,
@@ -164,8 +166,8 @@ internal fun calculatePopupPlacement(
         anchorTop = anchorRect.top,
         anchorRight = anchorRect.right,
         anchorBottom = anchorRect.bottom,
-        popupWidthPx = popupWidthPx,
-        popupHeightPx = popupHeightPx,
+        preferredPopupWidthPx = preferredPopupWidthPx,
+        preferredPopupHeightPx = preferredPopupHeightPx,
         viewportWidthPx = viewportWidthPx,
         viewportHeightPx = viewportHeightPx,
         gapPx = gapPx,
@@ -178,36 +180,122 @@ internal fun calculatePopupPlacement(
     anchorTop: Float,
     anchorRight: Float,
     anchorBottom: Float,
-    popupWidthPx: Float,
-    popupHeightPx: Float,
+    preferredPopupWidthPx: Float,
+    preferredPopupHeightPx: Float,
     viewportWidthPx: Float,
     viewportHeightPx: Float,
     gapPx: Float,
     marginPx: Float,
 ): PopupPlacement? {
-    val placements = listOf(
-        PopupPlacement(anchorRight + gapPx, anchorTop),
-        PopupPlacement(anchorLeft - gapPx - popupWidthPx, anchorTop),
-        PopupPlacement(anchorLeft, anchorBottom + gapPx),
-        PopupPlacement(anchorLeft, anchorTop - gapPx - popupHeightPx),
+    val availableViewportWidth = (viewportWidthPx - (marginPx * 2)).coerceAtLeast(0f)
+    val availableViewportHeight = (viewportHeightPx - (marginPx * 2)).coerceAtLeast(0f)
+    if (availableViewportWidth <= 0f || availableViewportHeight <= 0f) {
+        return null
+    }
+
+    fun clampHorizontal(x: Float, width: Float): Float {
+        return x.coerceIn(marginPx, viewportWidthPx - marginPx - width)
+    }
+
+    fun clampVertical(y: Float, height: Float): Float {
+        return y.coerceIn(marginPx, viewportHeightPx - marginPx - height)
+    }
+
+    data class CandidatePlacement(
+        val placement: PopupPlacement,
+        val score: Float,
+        val priority: Int,
     )
 
-    return placements.firstOrNull { placement ->
-        placement.x >= marginPx &&
-            placement.y >= marginPx &&
-            placement.x + popupWidthPx <= viewportWidthPx - marginPx &&
-            placement.y + popupHeightPx <= viewportHeightPx - marginPx &&
-            !rectsIntersect(
-                firstLeft = anchorLeft,
-                firstTop = anchorTop,
-                firstRight = anchorRight,
-                firstBottom = anchorBottom,
-                secondLeft = placement.x,
-                secondTop = placement.y,
-                secondRight = placement.x + popupWidthPx,
-                secondBottom = placement.y + popupHeightPx,
+    val candidates = buildList {
+        val rightX = max(anchorRight + gapPx, marginPx)
+        val rightWidth = min(preferredPopupWidthPx, viewportWidthPx - marginPx - rightX)
+        if (rightWidth > 0f) {
+            val rightHeight = min(preferredPopupHeightPx, availableViewportHeight)
+            add(
+                CandidatePlacement(
+                    placement = PopupPlacement(
+                        x = rightX,
+                        y = clampVertical(anchorTop, rightHeight),
+                        width = rightWidth,
+                        height = rightHeight,
+                    ),
+                    score = rightWidth * rightHeight,
+                    priority = 0,
+                ),
             )
+        }
+
+        val leftWidth = min(preferredPopupWidthPx, anchorLeft - gapPx - marginPx)
+        if (leftWidth > 0f) {
+            val leftHeight = min(preferredPopupHeightPx, availableViewportHeight)
+            add(
+                CandidatePlacement(
+                    placement = PopupPlacement(
+                        x = anchorLeft - gapPx - leftWidth,
+                        y = clampVertical(anchorTop, leftHeight),
+                        width = leftWidth,
+                        height = leftHeight,
+                    ),
+                    score = leftWidth * leftHeight,
+                    priority = 1,
+                ),
+            )
+        }
+
+        val belowY = max(anchorBottom + gapPx, marginPx)
+        val belowHeight = min(preferredPopupHeightPx, viewportHeightPx - marginPx - belowY)
+        if (belowHeight > 0f) {
+            val belowWidth = min(preferredPopupWidthPx, availableViewportWidth)
+            add(
+                CandidatePlacement(
+                    placement = PopupPlacement(
+                        x = clampHorizontal(anchorLeft, belowWidth),
+                        y = belowY,
+                        width = belowWidth,
+                        height = belowHeight,
+                    ),
+                    score = belowWidth * belowHeight,
+                    priority = 2,
+                ),
+            )
+        }
+
+        val aboveHeight = min(preferredPopupHeightPx, anchorTop - gapPx - marginPx)
+        if (aboveHeight > 0f) {
+            val aboveWidth = min(preferredPopupWidthPx, availableViewportWidth)
+            add(
+                CandidatePlacement(
+                    placement = PopupPlacement(
+                        x = clampHorizontal(anchorLeft, aboveWidth),
+                        y = anchorTop - gapPx - aboveHeight,
+                        width = aboveWidth,
+                        height = aboveHeight,
+                    ),
+                    score = aboveWidth * aboveHeight,
+                    priority = 3,
+                ),
+            )
+        }
+
+        add(
+            CandidatePlacement(
+                placement = PopupPlacement(
+                    x = clampHorizontal((viewportWidthPx - preferredPopupWidthPx) / 2f, min(preferredPopupWidthPx, availableViewportWidth)),
+                    y = clampVertical((viewportHeightPx - preferredPopupHeightPx) / 2f, min(preferredPopupHeightPx, availableViewportHeight)),
+                    width = min(preferredPopupWidthPx, availableViewportWidth),
+                    height = min(preferredPopupHeightPx, availableViewportHeight),
+                ),
+                score = availableViewportWidth * availableViewportHeight,
+                priority = 4,
+            ),
+        )
     }
+
+    return candidates
+        .sortedWith(compareByDescending<CandidatePlacement> { it.score }.thenBy { it.priority })
+        .firstOrNull()
+        ?.placement
 }
 
 internal fun rectsIntersect(
