@@ -76,8 +76,10 @@ class PagerPageHolder(
                 ReaderOcrRegionSelection(
                     page = ReaderOcrPageIdentity(chapterId, page.index),
                     regionOrder = tap.regionOrder,
-                    text = tap.text,
+                    displayText = tap.displayText,
+                    queryText = tap.queryText,
                     boundingBox = tap.boundingBox,
+                    textOrientation = tap.textOrientation,
                     anchorRectOnScreen = tap.anchorRectOnScreen,
                     initialSelectionOffset = tap.initialSelectionOffset,
                 ),

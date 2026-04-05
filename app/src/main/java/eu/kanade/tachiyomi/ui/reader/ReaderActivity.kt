@@ -91,6 +91,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderActiveOcrOverlay
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderOcrRegionSelection
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.queryRangeToDisplayRange
 import eu.kanade.tachiyomi.ui.reader.viewer.searchTextForOffset
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
@@ -182,8 +183,10 @@ class ReaderActivity : BaseActivity() {
             get() = ReaderActiveOcrOverlay(
                 page = selection.page,
                 regionOrder = selection.regionOrder,
-                text = selection.text,
+                displayText = selection.displayText,
+                queryText = selection.queryText,
                 boundingBox = selection.boundingBox,
+                textOrientation = selection.textOrientation,
                 highlightRange = highlightRange,
             )
 
@@ -678,7 +681,11 @@ class ReaderActivity : BaseActivity() {
                     is ReaderViewModel.Dialog.OcrResult -> {
                         val searchState by dictionarySearchScreenModel.state.collectAsState()
                         LaunchedEffect(activeOcrOverlaySession?.selection, searchState.results?.highlightRange) {
-                            updateActiveOcrOverlayHighlight(searchState.results?.highlightRange)
+                            updateActiveOcrOverlayHighlight(
+                                activeOcrOverlaySession?.selection?.displayText?.let {
+                                    queryRangeToDisplayRange(it, searchState.results?.highlightRange)
+                                },
+                            )
                         }
                         OcrResultOverlay(
                             onDismissRequest = onDismissOcrResult,
@@ -1005,10 +1012,11 @@ class ReaderActivity : BaseActivity() {
         if (!syncActiveOcrOverlay()) {
             return
         }
+
         viewModel.showOcrResult(
-            text = selection.text,
+            text = selection.queryText,
             origin = ReaderViewModel.OcrResultOrigin.CachedPageTap,
-            initialSearchText = searchTextForOffset(selection.text, selection.initialSelectionOffset),
+            initialSearchText = searchTextForOffset(selection.queryText, selection.initialSelectionOffset),
         )
     }
 
@@ -1022,7 +1030,7 @@ class ReaderActivity : BaseActivity() {
 
     fun searchActiveOcrOverlay(offset: Int) {
         val session = activeOcrOverlaySession ?: return
-        val text = session.selection.text
+        val text = session.selection.queryText
         activeOcrOverlaySession = session.copy(highlightRange = null)
         syncActiveOcrOverlay()
         dictionarySearchScreenModel.updateQuery(text)

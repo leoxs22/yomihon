@@ -14,9 +14,7 @@ import android.graphics.drawable.Drawable
 import android.text.Layout
 import android.text.SpannableString
 import android.text.Spanned
-import android.text.StaticLayout
 import android.text.TextPaint
-import android.text.TextUtils
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.util.AttributeSet
@@ -55,10 +53,14 @@ import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
 import mihon.domain.ocr.model.OcrBoundingBox
 import mihon.domain.ocr.model.OcrPageResult
+import mihon.domain.ocr.model.OcrTextOrientation
+import mihon.domain.ocr.model.flattenOcrTextForQuery
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * A wrapper view for showing page image.
@@ -504,8 +506,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
         onOcrRegionClicked?.invoke(
             ReaderPageOcrRegionTap(
                 regionOrder = region.order,
-                text = region.text,
+                displayText = region.text,
+                queryText = flattenOcrTextForQuery(region.text),
                 boundingBox = region.boundingBox,
+                textOrientation = region.textOrientation,
                 anchorRectOnScreen = boundingBoxToScreenRect(region.boundingBox, result),
                 initialSelectionOffset = resolveInitialSelectionOffset(region, result, localX, localY),
             ),
@@ -521,7 +525,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         if (!overlayLayout.bubbleRect.contains(localX, localY)) return null
         return if (isPointNearOverlayText(overlayLayout, localX, localY)) {
             ReaderActiveOcrTapResult.SelectWord(
-                resolveSelectionOffset(overlayLayout, localX, localY, activeOcrOverlay?.text.orEmpty()),
+                resolveSelectionOffset(overlayLayout, localX, localY),
             )
         } else {
             ReaderActiveOcrTapResult.BubbleTap
@@ -535,13 +539,40 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun drawActiveOcrOverlay(canvas: Canvas) {
         val overlayLayout = getOrBuildActiveOverlayLayout() ?: return
-        val cornerRadius = resources.displayMetrics.density * 12f
-        canvas.drawRoundRect(overlayLayout.bubbleRect, cornerRadius, cornerRadius, ocrOverlayBackgroundPaint)
-        canvas.drawRoundRect(overlayLayout.bubbleRect, cornerRadius, cornerRadius, ocrOverlayStrokePaint)
-        canvas.save()
-        canvas.translate(overlayLayout.textRect.left, overlayLayout.textRect.top)
-        overlayLayout.layout.draw(canvas)
-        canvas.restore()
+        canvas.drawRect(overlayLayout.bubbleRect, ocrOverlayBackgroundPaint)
+        canvas.drawRect(overlayLayout.bubbleRect, ocrOverlayStrokePaint)
+        when (overlayLayout) {
+            is OverlayTextLayout.Horizontal -> drawHorizontalOverlayText(canvas, overlayLayout)
+            is OverlayTextLayout.Vertical -> drawVerticalOverlayText(canvas, overlayLayout)
+        }
+    }
+
+    private fun drawHorizontalOverlayText(canvas: Canvas, overlayLayout: OverlayTextLayout.Horizontal) {
+        ocrOverlayTextPaint.textSize = overlayLayout.textSizePx
+        overlayLayout.lines.forEach { line ->
+            line.highlightSegments.forEach { segment ->
+                canvas.drawRect(segment, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.argb(220, 255, 214, 10)
+                })
+            }
+            ocrOverlayTextPaint.color = Color.WHITE
+            canvas.drawText(line.text, line.left, line.baselineY, ocrOverlayTextPaint)
+        }
+    }
+
+    private fun drawVerticalOverlayText(canvas: Canvas, overlayLayout: OverlayTextLayout.Vertical) {
+        overlayLayout.glyphs.forEach { glyph ->
+            if (glyph.isHighlighted) {
+                canvas.drawRoundRect(glyph.rect, resources.displayMetrics.density * 4f, resources.displayMetrics.density * 4f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.argb(220, 255, 214, 10)
+                })
+            }
+            ocrOverlayTextPaint.textSize = overlayLayout.textSizePx
+            ocrOverlayTextPaint.color = if (glyph.isHighlighted) Color.BLACK else Color.WHITE
+            val textWidth = ocrOverlayTextPaint.measureText(glyph.char)
+            val textX = glyph.rect.left + ((glyph.rect.width() - textWidth) / 2f)
+            canvas.drawText(glyph.char, textX, glyph.baselineY, ocrOverlayTextPaint)
+        }
     }
 
     private fun resolveInitialSelectionOffset(
@@ -553,10 +584,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val overlayLayout = buildOverlayTextLayout(
             bubbleRect = boundingBoxToLocalRect(region.boundingBox, pageResult) ?: return 0,
             text = region.text,
+            textOrientation = region.textOrientation,
             highlightRange = null,
         ) ?: return 0
         return if (isPointNearOverlayText(overlayLayout, localX, localY)) {
-            resolveSelectionOffset(overlayLayout, localX, localY, region.text)
+            resolveSelectionOffset(overlayLayout, localX, localY)
         } else {
             0
         }
@@ -570,7 +602,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val bubbleRect = boundingBoxToLocalRect(overlay.boundingBox, result) ?: return null
         return buildOverlayTextLayout(
             bubbleRect = bubbleRect,
-            text = overlay.text,
+            text = overlay.displayText,
+            textOrientation = overlay.textOrientation,
             highlightRange = overlay.highlightRange,
         )?.also {
             activeOverlayLayout = it
@@ -580,68 +613,23 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private fun buildOverlayTextLayout(
         bubbleRect: RectF,
         text: String,
+        textOrientation: OcrTextOrientation,
         highlightRange: Pair<Int, Int>?,
     ): OverlayTextLayout? {
         if (text.isBlank() || bubbleRect.width() <= 0f || bubbleRect.height() <= 0f) return null
 
         val density = resources.displayMetrics.density
         val scaledDensity = resources.displayMetrics.scaledDensity
-        val horizontalPadding = bubbleRect.width().coerceAtMost(12f * density) / 6f
-        val verticalPadding = bubbleRect.height().coerceAtMost(12f * density) / 6f
-        val contentWidth = (bubbleRect.width() - (horizontalPadding * 2)).toInt().coerceAtLeast(1)
-        val maxContentHeight = (bubbleRect.height() - (verticalPadding * 2)).toInt().coerceAtLeast(1)
-        val textSpan = buildOverlayTextSpan(text, highlightRange)
-
-        val maxTextSizePx = minOf(24f * scaledDensity, bubbleRect.height() * 0.38f).coerceAtLeast(12f * scaledDensity)
-        val minTextSizePx = minOf(maxTextSizePx, 10f * scaledDensity)
-
-        var textSizePx = maxTextSizePx
-        while (textSizePx >= minTextSizePx) {
-            val layout = createOverlayLayout(textSpan, contentWidth, maxContentHeight, textSizePx)
-            if (layout.height <= maxContentHeight) {
-                val textTop = bubbleRect.top + verticalPadding + ((maxContentHeight - layout.height) / 2f)
-                return OverlayTextLayout(
-                    bubbleRect = RectF(bubbleRect),
-                    textRect = RectF(
-                        bubbleRect.left + horizontalPadding,
-                        textTop,
-                        bubbleRect.left + horizontalPadding + contentWidth,
-                        textTop + layout.height,
-                    ),
-                    layout = layout,
-                )
-            }
-            textSizePx -= scaledDensity
-        }
-
-        val fallbackLayout = createOverlayLayout(textSpan, contentWidth, maxContentHeight, minTextSizePx)
-        return OverlayTextLayout(
-            bubbleRect = RectF(bubbleRect),
-            textRect = RectF(
-                bubbleRect.left + horizontalPadding,
-                bubbleRect.top + verticalPadding,
-                bubbleRect.left + horizontalPadding + contentWidth,
-                bubbleRect.top + verticalPadding + minOf(fallbackLayout.height, maxContentHeight),
-            ),
-            layout = fallbackLayout,
+        val contentRect = RectF(
+            bubbleRect.left,
+            bubbleRect.top,
+            bubbleRect.right,
+            bubbleRect.bottom,
         )
-    }
-
-    private fun createOverlayLayout(
-        text: CharSequence,
-        width: Int,
-        maxHeight: Int,
-        textSizePx: Float,
-    ): StaticLayout {
-        ocrOverlayTextPaint.textSize = textSizePx
-        val maxLines = (maxHeight / ocrOverlayTextPaint.fontSpacing).toInt().coerceAtLeast(1)
-        return StaticLayout.Builder
-            .obtain(text, 0, text.length, ocrOverlayTextPaint, width)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setMaxLines(maxLines)
-            .setIncludePad(false)
-            .build()
+        return when (textOrientation) {
+            OcrTextOrientation.Horizontal -> buildHorizontalOverlayTextLayout(contentRect, bubbleRect, text, highlightRange, scaledDensity)
+            OcrTextOrientation.Vertical -> buildVerticalOverlayTextLayout(contentRect, bubbleRect, text, highlightRange, scaledDensity)
+        }
     }
 
     private fun buildOverlayTextSpan(
@@ -662,42 +650,271 @@ open class ReaderPageImageView @JvmOverloads constructor(
         }
     }
 
+    private fun buildHorizontalOverlayTextLayout(
+        contentRect: RectF,
+        bubbleRect: RectF,
+        text: String,
+        highlightRange: Pair<Int, Int>?,
+        scaledDensity: Float,
+    ): OverlayTextLayout? {
+        val lines = text.split('\n')
+        val maxTextSizePx = maxOf(
+            12f * scaledDensity,
+            minOf(contentRect.height(), contentRect.width()) * 0.9f,
+        )
+        val minTextSizePx = minOf(maxTextSizePx, 6f * scaledDensity)
+        val step = (scaledDensity * 0.5f).coerceAtLeast(0.5f)
+
+        var textSizePx = maxTextSizePx
+        while (textSizePx >= minTextSizePx) {
+            val layout = createHorizontalOverlayLayout(
+                bubbleRect = bubbleRect,
+                contentRect = contentRect,
+                lines = lines,
+                text = text,
+                highlightRange = highlightRange,
+                textSizePx = textSizePx,
+            )
+            if (layout != null) {
+                return layout
+            }
+            textSizePx -= step
+        }
+
+        return null
+    }
+
+    private fun createHorizontalOverlayLayout(
+        bubbleRect: RectF,
+        contentRect: RectF,
+        lines: List<String>,
+        text: String,
+        highlightRange: Pair<Int, Int>?,
+        textSizePx: Float,
+    ): OverlayTextLayout.Horizontal? {
+        ocrOverlayTextPaint.textSize = textSizePx
+        val fontMetrics = ocrOverlayTextPaint.fontMetrics
+        val lineHeight = fontMetrics.bottom - fontMetrics.top
+        if (lineHeight <= 0f) return null
+
+        val maxLineWidth = lines.maxOfOrNull { ocrOverlayTextPaint.measureText(it) } ?: 0f
+        if (maxLineWidth > contentRect.width() || lineHeight > contentRect.height()) {
+            return null
+        }
+
+        val lineCount = lines.size.coerceAtLeast(1)
+        val lineTopStep = if (lineCount == 1) 0f else (contentRect.height() - lineHeight) / (lineCount - 1)
+        val linePlacements = mutableListOf<HorizontalLinePlacement>()
+        var displayOffset = 0
+        lines.forEachIndexed { index, line ->
+            val lineTop = contentRect.top + (lineTopStep * index)
+            val baselineY = lineTop - fontMetrics.top
+            val lineBottom = lineTop + lineHeight
+            val highlightSegments = mutableListOf<RectF>()
+
+            line.forEachIndexed { charIndex, _ ->
+                val charStart = displayOffset + charIndex
+                if (highlightRange != null && charStart in highlightRange.first until highlightRange.second) {
+                    val left = contentRect.left + ocrOverlayTextPaint.measureText(line, 0, charIndex)
+                    val right = contentRect.left + ocrOverlayTextPaint.measureText(line, 0, charIndex + 1)
+                    highlightSegments += RectF(left, lineTop, right, lineBottom)
+                }
+            }
+
+            linePlacements += HorizontalLinePlacement(
+                text = line,
+                left = contentRect.left,
+                top = lineTop,
+                bottom = lineBottom,
+                baselineY = baselineY,
+                startDisplayOffset = displayOffset,
+                highlightSegments = highlightSegments,
+            )
+            displayOffset += line.length
+            if (index < lines.lastIndex) {
+                displayOffset++
+            }
+        }
+
+        return OverlayTextLayout.Horizontal(
+            bubbleRect = RectF(bubbleRect),
+            textRect = RectF(contentRect),
+            lines = linePlacements,
+            displayText = text,
+            textSizePx = textSizePx,
+        )
+    }
+
+    private fun buildVerticalOverlayTextLayout(
+        contentRect: RectF,
+        bubbleRect: RectF,
+        text: String,
+        highlightRange: Pair<Int, Int>?,
+        scaledDensity: Float,
+    ): OverlayTextLayout? {
+        val lines = text.split('\n')
+        val maxCharsInColumn = lines.maxOfOrNull(String::length)?.coerceAtLeast(1) ?: return null
+        val columnCount = lines.size.coerceAtLeast(1)
+        val maxTextSizePx = maxOf(
+            12f * scaledDensity,
+            minOf(contentRect.height() / maxCharsInColumn, contentRect.width() / columnCount) * 1.2f,
+        )
+        val minTextSizePx = minOf(maxTextSizePx, 6f * scaledDensity)
+        val step = (scaledDensity * 0.5f).coerceAtLeast(0.5f)
+
+        var textSizePx = maxTextSizePx
+        while (textSizePx >= minTextSizePx) {
+            val layout = createVerticalOverlayLayout(
+                bubbleRect = bubbleRect,
+                contentRect = contentRect,
+                text = text,
+                highlightRange = highlightRange,
+                textSizePx = textSizePx,
+            )
+            if (layout != null) {
+                return layout
+            }
+            textSizePx -= step
+        }
+
+        return null
+    }
+
+    private fun createVerticalOverlayLayout(
+        bubbleRect: RectF,
+        contentRect: RectF,
+        text: String,
+        highlightRange: Pair<Int, Int>?,
+        textSizePx: Float,
+    ): OverlayTextLayout.Vertical? {
+        ocrOverlayTextPaint.textSize = textSizePx
+        val fontMetrics = ocrOverlayTextPaint.fontMetrics
+        val lineHeight = fontMetrics.bottom - fontMetrics.top
+        if (lineHeight <= 0f) return null
+
+        val lines = text.split('\n')
+        val columnCount = lines.size.coerceAtLeast(1)
+        val columnWidth = contentRect.width() / columnCount
+        if (columnWidth <= 0f) return null
+
+        val lineData = mutableListOf<VerticalLineData>()
+        var displayOffset = 0
+        for ((lineIndex, line) in lines.withIndex()) {
+            val glyphs = mutableListOf<VerticalGlyph>()
+            line.forEachIndexed { charIndex, char ->
+                val glyphWidth = maxOf(ocrOverlayTextPaint.measureText(char.toString()), textSizePx * 0.85f)
+                val isHighlighted = highlightRange?.let { displayOffset in it.first until it.second } == true
+                glyphs += VerticalGlyph(
+                    char = char.toString(),
+                    displayOffset = displayOffset,
+                    glyphWidth = glyphWidth,
+                    isHighlighted = isHighlighted,
+                    indexInColumn = charIndex,
+                )
+                displayOffset++
+            }
+            lineData += VerticalLineData(
+                glyphs = glyphs,
+                lineWidth = glyphs.maxOfOrNull { it.glyphWidth }?.coerceAtLeast(textSizePx * 0.85f) ?: textSizePx * 0.85f,
+            )
+            if (lineIndex < lines.lastIndex) {
+                displayOffset++
+            }
+        }
+
+        if (lineData.any { it.lineWidth > columnWidth } || lineHeight > contentRect.height()) {
+            return null
+        }
+
+        val placedGlyphs = mutableListOf<VerticalGlyphPlacement>()
+        lineData.forEachIndexed { columnIndex, line ->
+            val columnLeft = contentRect.right - ((columnIndex + 1) * columnWidth)
+            val columnRight = columnLeft + columnWidth
+            val glyphTopStep = if (line.glyphs.size <= 1) 0f else (contentRect.height() - lineHeight) / (line.glyphs.size - 1)
+            line.glyphs.forEach { glyph ->
+                val glyphTop = contentRect.top + (glyph.indexInColumn * glyphTopStep)
+                placedGlyphs += VerticalGlyphPlacement(
+                    char = glyph.char,
+                    displayOffset = glyph.displayOffset,
+                    rect = RectF(columnLeft, glyphTop, columnRight, glyphTop + lineHeight),
+                    baselineY = glyphTop - fontMetrics.top,
+                    isHighlighted = glyph.isHighlighted,
+                )
+            }
+        }
+
+        return OverlayTextLayout.Vertical(
+            bubbleRect = RectF(bubbleRect),
+            textRect = RectF(contentRect),
+            glyphs = placedGlyphs,
+            displayText = text,
+            textSizePx = textSizePx,
+        )
+    }
+
     private fun isPointNearOverlayText(
         overlayLayout: OverlayTextLayout,
         localX: Float,
         localY: Float,
     ): Boolean {
-        val layoutLocalY = localY - overlayLayout.textRect.top
-        if (layoutLocalY < 0f || layoutLocalY > overlayLayout.layout.height.toFloat()) {
-            return false
-        }
-
-        val line = overlayLayout.layout.getLineForVertical(layoutLocalY.toInt())
-        val lineTop = overlayLayout.textRect.top + overlayLayout.layout.getLineTop(line)
-        val lineBottom = overlayLayout.textRect.top + overlayLayout.layout.getLineBottom(line)
-        val lineLeft = overlayLayout.textRect.left + overlayLayout.layout.getLineLeft(line)
-        val lineRight = overlayLayout.textRect.left + overlayLayout.layout.getLineRight(line)
         val allowancePx = resources.displayMetrics.density * 12f
-
-        return localY >= lineTop - allowancePx &&
-            localY <= lineBottom + allowancePx &&
-            localX >= minOf(lineLeft, lineRight) - allowancePx &&
-            localX <= maxOf(lineLeft, lineRight) + allowancePx
+        return when (overlayLayout) {
+            is OverlayTextLayout.Horizontal -> {
+                overlayLayout.lines.any { line ->
+                    val lineRight = line.left + ocrOverlayTextPaint.measureText(line.text)
+                    localY >= line.top - allowancePx &&
+                        localY <= line.bottom + allowancePx &&
+                        localX >= line.left - allowancePx &&
+                        localX <= lineRight + allowancePx
+                }
+            }
+            is OverlayTextLayout.Vertical -> overlayLayout.glyphs.any { glyph ->
+                localX >= glyph.rect.left - allowancePx &&
+                    localX <= glyph.rect.right + allowancePx &&
+                    localY >= glyph.rect.top - allowancePx &&
+                    localY <= glyph.rect.bottom + allowancePx
+            }
+        }
     }
 
     private fun resolveSelectionOffset(
         overlayLayout: OverlayTextLayout,
         localX: Float,
         localY: Float,
-        text: String,
     ): Int {
-        if (text.isEmpty()) return 0
-        val line = overlayLayout.layout.getLineForVertical(
-            (localY - overlayLayout.textRect.top).toInt().coerceAtLeast(0),
-        )
-        return overlayLayout.layout
-            .getOffsetForHorizontal(line, (localX - overlayLayout.textRect.left).coerceAtLeast(0f))
-            .coerceIn(0, text.lastIndex)
+        val displayText = overlayLayout.displayText
+        if (displayText.isEmpty()) return 0
+
+        val displayOffset = when (overlayLayout) {
+            is OverlayTextLayout.Horizontal -> {
+                val line = overlayLayout.lines.minByOrNull { placedLine ->
+                    val centerY = (placedLine.top + placedLine.bottom) / 2f
+                    kotlin.math.abs(centerY - localY)
+                } ?: return 0
+                val relativeX = (localX - line.left).coerceAtLeast(0f)
+                var charOffsetInLine = line.text.length
+                for (index in line.text.indices) {
+                    val charCenter = ocrOverlayTextPaint.measureText(line.text, 0, index) +
+                        (ocrOverlayTextPaint.measureText(line.text[index].toString()) / 2f)
+                    if (relativeX <= charCenter) {
+                        charOffsetInLine = index
+                        break
+                    }
+                }
+                min(line.startDisplayOffset + charOffsetInLine, displayText.lastIndex)
+            }
+            is OverlayTextLayout.Vertical -> {
+                overlayLayout.glyphs.minByOrNull { glyph ->
+                    val centerX = (glyph.rect.left + glyph.rect.right) / 2f
+                    val centerY = (glyph.rect.top + glyph.rect.bottom) / 2f
+                    val deltaX = centerX - localX
+                    val deltaY = centerY - localY
+                    (deltaX * deltaX) + (deltaY * deltaY)
+                }?.displayOffset ?: 0
+            }
+        }
+
+        return displayOffsetToQueryOffset(displayText, displayOffset)
     }
 
     private fun boundingBoxToLocalRect(
@@ -845,10 +1062,57 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
 private const val MAX_ZOOM_SCALE = 5F
 
-private data class OverlayTextLayout(
-    val bubbleRect: RectF,
-    val textRect: RectF,
-    val layout: StaticLayout,
+private sealed interface OverlayTextLayout {
+    val bubbleRect: RectF
+    val textRect: RectF
+    val displayText: String
+
+    data class Horizontal(
+        override val bubbleRect: RectF,
+        override val textRect: RectF,
+        val lines: List<HorizontalLinePlacement>,
+        override val displayText: String,
+        val textSizePx: Float,
+    ) : OverlayTextLayout
+
+    data class Vertical(
+        override val bubbleRect: RectF,
+        override val textRect: RectF,
+        val glyphs: List<VerticalGlyphPlacement>,
+        override val displayText: String,
+        val textSizePx: Float,
+    ) : OverlayTextLayout
+}
+
+private data class VerticalGlyph(
+    val char: String,
+    val displayOffset: Int,
+    val glyphWidth: Float,
+    val isHighlighted: Boolean,
+    val indexInColumn: Int,
+)
+
+private data class VerticalLineData(
+    val glyphs: List<VerticalGlyph>,
+    val lineWidth: Float,
+)
+
+private data class VerticalGlyphPlacement(
+    val char: String,
+    val displayOffset: Int,
+    val rect: RectF,
+    val baselineY: Float,
+    val isHighlighted: Boolean,
+)
+
+private data class HorizontalLinePlacement(
+    val text: String,
+    val left: Float,
+    val top: Float,
+    val bottom: Float,
+    val baselineY: Float,
+    val startDisplayOffset: Int,
+    val highlightSegments: List<RectF>,
 )
 
 private fun OcrBoundingBox.toSourceRect(pageResult: OcrPageResult): RectF {
