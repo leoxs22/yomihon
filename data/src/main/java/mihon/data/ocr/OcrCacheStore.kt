@@ -1,6 +1,7 @@
 package mihon.data.ocr
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import kotlinx.coroutines.sync.Mutex
@@ -9,6 +10,7 @@ import mihon.domain.ocr.model.OcrBoundingBox
 import mihon.domain.ocr.model.OcrModel
 import mihon.domain.ocr.model.OcrPageResult
 import mihon.domain.ocr.model.OcrRegion
+import mihon.domain.ocr.model.OcrTextOrientation
 import tachiyomi.data.ocr.OcrCacheDatabase
 
 internal class OcrCacheStore(
@@ -43,6 +45,7 @@ internal class OcrCacheStore(
                         rightNorm = box.right.toDouble(),
                         bottomNorm = box.bottom.toDouble(),
                         text = region.text,
+                        orientation = region.textOrientation.name,
                     )
                 }
             }
@@ -78,6 +81,7 @@ internal class OcrCacheStore(
                     rightNorm,
                     bottomNorm,
                     text,
+                    orientation,
                 ->
                 OcrRegionRow(
                     id = _id,
@@ -92,6 +96,7 @@ internal class OcrCacheStore(
                             right = rightNorm.toFloat(),
                             bottom = bottomNorm.toFloat(),
                         ),
+                        textOrientation = OcrTextOrientation.valueOf(orientation),
                     ),
                 )
             }.executeAsList()
@@ -163,11 +168,12 @@ internal class OcrCacheStore(
         }
 
         return synchronized(this) {
-            databaseHandle?.database ?: createDatabase().also { databaseHandle = it }.database
+            databaseHandle?.database ?: createDatabaseHandle().also { databaseHandle = it }.database
         }
     }
 
-    private fun createDatabase(): DatabaseHandle {
+    private fun createDatabaseHandle(): DatabaseHandle {
+        deleteDatabaseIfSchemaOutdated()
         val driver = AndroidSqliteDriver(
             schema = OcrCacheDatabase.Schema,
             context = context,
@@ -183,6 +189,38 @@ internal class OcrCacheStore(
             database = OcrCacheDatabase(driver),
             driver = driver,
         )
+    }
+
+    private fun deleteDatabaseIfSchemaOutdated() {
+        val databasePath = context.getDatabasePath(DB_NAME)
+        if (!databasePath.exists()) {
+            return
+        }
+
+        val database = SQLiteDatabase.openDatabase(
+            databasePath.path,
+            null,
+            SQLiteDatabase.OPEN_READONLY,
+        )
+        var shouldDelete = false
+        try {
+            database.rawQuery("PRAGMA table_info(ocr_regions)", null).use { cursor ->
+                var hasOrientationColumn = false
+                val nameIndex = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (nameIndex >= 0 && cursor.getString(nameIndex) == "orientation") {
+                        hasOrientationColumn = true
+                        break
+                    }
+                }
+                shouldDelete = !hasOrientationColumn
+            }
+        } finally {
+            database.close()
+        }
+        if (shouldDelete) {
+            deleteDatabaseFile()
+        }
     }
 
     private fun deleteDatabaseFile() {

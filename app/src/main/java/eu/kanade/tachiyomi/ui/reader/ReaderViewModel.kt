@@ -59,6 +59,7 @@ import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import mihon.domain.ocr.exception.OcrException
 import mihon.domain.ocr.interactor.OcrProcessor
+import mihon.domain.ocr.model.flattenOcrTextForQuery
 import mihon.domain.ocr.repository.OcrRepository
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.lang.launchIO
@@ -850,9 +851,10 @@ class ReaderViewModel @JvmOverloads constructor(
             try {
                 val text = ocrProcessor.getText(bitmap.toOcrImage())
                 withUIContext {
-                    if (text.isNotBlank()) {
+                    val queryText = flattenOcrTextForQuery(text)
+                    if (queryText.isNotBlank()) {
                         showOcrResult(
-                            text = text,
+                            text = queryText,
                             origin = OcrResultOrigin.ManualSelection,
                         )
                         mutableState.update { it.copy(isProcessingOcr = false) }

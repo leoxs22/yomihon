@@ -30,10 +30,16 @@ data class OcrBoundingBox(
     }
 }
 
+enum class OcrTextOrientation {
+    Horizontal,
+    Vertical,
+}
+
 data class OcrRegion(
     val order: Int,
     val text: String,
     val boundingBox: OcrBoundingBox,
+    val textOrientation: OcrTextOrientation,
 )
 
 data class OcrPageResult(
@@ -45,5 +51,12 @@ data class OcrPageResult(
     val regions: List<OcrRegion>,
 ) {
     val text: String
-        get() = regions.joinToString(separator = " ") { it.text }.trim()
+        get() = regions.joinToString(separator = " ") { flattenOcrTextForQuery(it.text) }.trim()
+}
+
+fun flattenOcrTextForQuery(text: String): String {
+    if (text.isBlank()) return text.trim()
+    return text
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

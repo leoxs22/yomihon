@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.domain.ocr.model.OcrBoundingBox
 import mihon.domain.ocr.model.OcrRegion
+import mihon.domain.ocr.model.OcrTextOrientation
 import tachiyomi.core.common.util.system.logcat
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -716,6 +717,7 @@ internal class GlensOcrEngine : OcrEngine {
             order = order,
             text = textPostprocessor.postprocess(text),
             boundingBox = box,
+            textOrientation = if (isVertical) OcrTextOrientation.Vertical else OcrTextOrientation.Horizontal,
         )
     }
 

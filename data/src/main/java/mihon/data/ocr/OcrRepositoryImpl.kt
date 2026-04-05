@@ -21,6 +21,7 @@ import mihon.domain.ocr.model.OcrImage
 import mihon.domain.ocr.model.OcrModel
 import mihon.domain.ocr.model.OcrPageResult
 import mihon.domain.ocr.model.OcrRegion
+import mihon.domain.ocr.model.OcrTextOrientation
 import mihon.domain.ocr.repository.OcrRepository
 import tachiyomi.core.common.preference.AndroidPreferenceStore
 import tachiyomi.core.common.preference.getEnum
@@ -357,6 +358,7 @@ class OcrRepositoryImpl(
                         order = index,
                         text = text,
                         boundingBox = box,
+                        textOrientation = OcrTextOrientation.Horizontal,
                     )
                 }
             } finally {

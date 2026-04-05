@@ -105,6 +105,20 @@ class TextPostprocessor {
     fun postprocess(text: String): String {
         if (text.isEmpty()) return text
 
+        val normalizedLines = text
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .split('\n')
+            .map(::postprocessSingleLine)
+            .dropWhile(String::isEmpty)
+            .dropLastWhile(String::isEmpty)
+
+        return normalizedLines.joinToString(separator = "\n")
+    }
+
+    private fun postprocessSingleLine(text: String): String {
+        if (text.isEmpty()) return text
+
         val hasJapaneseText = text.any { it.isJapaneseScript() }
 
         stringBuilder.setLength(0)
