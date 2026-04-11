@@ -271,7 +271,9 @@ class PagerPageHolder(
                 if (generation != panelDetectionGeneration) return@withUIContext
 
                 panels = result.panels
-                setPanelDebugDetections(result.debugPanels, result.debugBubbles)
+                if (eu.kanade.tachiyomi.BuildConfig.DEBUG) {
+                    setPanelDebugDetections(result.debugPanels, result.debugBubbles)
+                }
                 currentPanelIndex = -1
                 logcat {
                     "Panel nav detection assigned index=${page.index} panels=${panels.size} " +
