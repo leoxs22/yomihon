@@ -187,17 +187,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
         // Compute where the view will actually end up after pan-limit clamping
         val clampedCenter = clampCenter(
-            targetCenter, clampedScale,
-            view.width, view.height, view.sWidth, view.sHeight,
+            targetCenter,
+            clampedScale,
+            view.width,
+            view.height,
+            view.sWidth,
+            view.sHeight,
         )
 
         // Compare current visible rect vs target visible rect
         val currentCenter = view.center
         val overlap = if (currentCenter != null) {
             visibleRectOverlap(
-                currentCenter, view.scale,
-                clampedCenter, clampedScale,
-                view.width, view.height, view.sWidth, view.sHeight,
+                currentCenter,
+                view.scale,
+                clampedCenter,
+                clampedScale,
+                view.width,
+                view.height,
+                view.sWidth,
+                view.sHeight,
             )
         } else {
             0f

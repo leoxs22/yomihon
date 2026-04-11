@@ -46,7 +46,8 @@ object ReadingOrderSorter {
             return when (direction) {
                 ReadingDirection.RTL -> sortRecursive(right, rects, direction) + sortRecursive(left, rects, direction)
                 ReadingDirection.LTR -> sortRecursive(left, rects, direction) + sortRecursive(right, rects, direction)
-                ReadingDirection.VERTICAL -> sortRecursive(left, rects, direction) + sortRecursive(right, rects, direction)
+                ReadingDirection.VERTICAL -> sortRecursive(left, rects, direction) +
+                    sortRecursive(right, rects, direction)
             }
         }
 

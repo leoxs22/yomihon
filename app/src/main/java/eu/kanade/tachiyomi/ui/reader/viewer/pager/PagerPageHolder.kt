@@ -278,7 +278,9 @@ class PagerPageHolder(
                 logcat {
                     "Panel nav detection assigned index=${page.index} panels=${panels.size} " +
                         "ordered=${panels.joinToString { it.rect.flattenToString() }} " +
-                        "debug=${result.debugPanels.joinToString { "${"%.2f".format(it.confidence)}@${it.rect.flattenToString()}" }}"
+                        "debug=${result.debugPanels.joinToString {
+                            "${"%.2f".format(it.confidence)}@${it.rect.flattenToString()}"
+                        }}"
                 }
             }
         }
@@ -370,7 +372,9 @@ class PagerPageHolder(
             }
             if (zoomToPanel(panels[previousIndex])) {
                 currentPanelIndex = previousIndex
-                logcat { "Panel nav previous result index=${page.index} zoomed=true currentPanelIndex=$currentPanelIndex" }
+                logcat {
+                    "Panel nav previous result index=${page.index} zoomed=true currentPanelIndex=$currentPanelIndex"
+                }
                 return true
             }
             // Zoom was too small, skip to previous

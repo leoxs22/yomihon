@@ -302,9 +302,9 @@ private class YoloPanelDetectionEngine(
 
             logcat(LogPriority.DEBUG) {
                 "Panel detector preprocess image=${image.width}x${image.height} " +
-                    "original=${originalWidth}x${originalHeight} " +
+                    "original=${originalWidth}x$originalHeight " +
                     "contentBounds=${pageBounds.flattenToString()} " +
-                    "crop=${cropWidth}x${cropHeight} scale=$scale " +
+                    "crop=${cropWidth}x$cropHeight scale=$scale " +
                     "pad=$padX,$padY dest=${destinationRect.flattenToString()}"
             }
         }
@@ -338,9 +338,12 @@ private class YoloPanelDetectionEngine(
         val topRaw = (0 until minOf(5, PREFERRED_OUTPUT_COUNT)).map { i ->
             val off = i * DETECTION_STRIDE
             "x0=%.3f y0=%.3f x1=%.3f y1=%.3f conf=%.3f cls=%.0f".format(
-                preferredValues[off], preferredValues[off + 1],
-                preferredValues[off + 2], preferredValues[off + 3],
-                preferredValues[off + 4], preferredValues[off + 5],
+                preferredValues[off],
+                preferredValues[off + 1],
+                preferredValues[off + 2],
+                preferredValues[off + 3],
+                preferredValues[off + 4],
+                preferredValues[off + 5],
             )
         }
         logcat(LogPriority.DEBUG) { "Panel detector top5 raw: ${topRaw.joinToString(" | ")}" }

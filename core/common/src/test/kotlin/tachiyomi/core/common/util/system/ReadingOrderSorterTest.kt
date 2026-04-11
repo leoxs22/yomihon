@@ -1,8 +1,8 @@
 package tachiyomi.core.common.util.system
 
 import android.graphics.Rect
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 class ReadingOrderSorterTest {
 
@@ -24,8 +24,8 @@ class ReadingOrderSorterTest {
     @Test
     fun `two panels side by side RTL`() {
         val rects = listOf(
-            r(0, 0, 400, 500),     // 0: left
-            r(410, 0, 800, 500),   // 1: right
+            r(0, 0, 400, 500), // 0: left
+            r(410, 0, 800, 500), // 1: right
         )
         assertEquals(listOf(1, 0), sortIndicesRtl(rects))
     }
@@ -33,8 +33,8 @@ class ReadingOrderSorterTest {
     @Test
     fun `two panels side by side LTR`() {
         val rects = listOf(
-            r(0, 0, 400, 500),     // 0: left
-            r(410, 0, 800, 500),   // 1: right
+            r(0, 0, 400, 500), // 0: left
+            r(410, 0, 800, 500), // 1: right
         )
         assertEquals(listOf(0, 1), sortIndicesLtr(rects))
     }
@@ -42,8 +42,8 @@ class ReadingOrderSorterTest {
     @Test
     fun `two panels stacked vertically`() {
         val rects = listOf(
-            r(0, 0, 800, 400),     // 0: top
-            r(0, 410, 800, 800),   // 1: bottom
+            r(0, 0, 800, 400), // 0: top
+            r(0, 410, 800, 800), // 1: bottom
         )
         assertEquals(listOf(0, 1), sortIndicesRtl(rects))
     }
@@ -51,9 +51,9 @@ class ReadingOrderSorterTest {
     @Test
     fun `2x2 grid RTL`() {
         val rects = listOf(
-            r(0, 0, 400, 400),     // 0: topLeft
-            r(410, 0, 800, 400),   // 1: topRight
-            r(0, 410, 400, 800),   // 2: bottomLeft
+            r(0, 0, 400, 400), // 0: topLeft
+            r(410, 0, 800, 400), // 1: topRight
+            r(0, 410, 400, 800), // 2: bottomLeft
             r(410, 410, 800, 800), // 3: bottomRight
         )
         // RTL: topRight, topLeft, bottomRight, bottomLeft
@@ -63,9 +63,9 @@ class ReadingOrderSorterTest {
     @Test
     fun `2x2 grid LTR`() {
         val rects = listOf(
-            r(0, 0, 400, 400),     // 0: topLeft
-            r(410, 0, 800, 400),   // 1: topRight
-            r(0, 410, 400, 800),   // 2: bottomLeft
+            r(0, 0, 400, 400), // 0: topLeft
+            r(410, 0, 800, 400), // 1: topRight
+            r(0, 410, 400, 800), // 2: bottomLeft
             r(410, 410, 800, 800), // 3: bottomRight
         )
         assertEquals(listOf(0, 1, 2, 3), sortIndicesLtr(rects))
@@ -76,9 +76,9 @@ class ReadingOrderSorterTest {
     @Test
     fun `tall right panel with stacked left panels RTL`() {
         val rects = listOf(
-            r(50, 110, 468, 340),  // 0: topLeft
-            r(50, 341, 468, 553),  // 1: midLeft
-            r(51, 563, 468, 759),  // 2: botLeft
+            r(50, 110, 468, 340), // 0: topLeft
+            r(50, 341, 468, 553), // 1: midLeft
+            r(51, 563, 468, 759), // 2: botLeft
             r(480, 111, 755, 756), // 3: tallRight
         )
         // RTL: tallRight first, then left stack top-to-bottom
@@ -88,7 +88,7 @@ class ReadingOrderSorterTest {
     @Test
     fun `tall left panel with stacked right panels RTL`() {
         val rects = listOf(
-            r(0, 100, 300, 800),   // 0: tallLeft
+            r(0, 100, 300, 800), // 0: tallLeft
             r(310, 100, 700, 350), // 1: topRight
             r(310, 360, 700, 580), // 2: midRight
             r(310, 590, 700, 800), // 3: botRight
@@ -102,11 +102,11 @@ class ReadingOrderSorterTest {
     @Test
     fun `page with wide top and rows below RTL - each row right before left`() {
         val rects = listOf(
-            r(235, 0, 715, 352),   // 0: wideTopRight
-            r(1, 0, 222, 350),     // 1: wideTopLeft
+            r(235, 0, 715, 352), // 0: wideTopRight
+            r(1, 0, 222, 350), // 1: wideTopLeft
             r(343, 387, 715, 814), // 2: midRight
-            r(13, 389, 332, 814),  // 3: midLeft
-            r(267, 851, 714, 1111),// 4: botRight
+            r(13, 389, 332, 814), // 3: midLeft
+            r(267, 851, 714, 1111), // 4: botRight
             r(14, 851, 254, 1110), // 5: botLeft
         )
         val result = sortIndicesRtl(rects)
@@ -127,10 +127,10 @@ class ReadingOrderSorterTest {
         val rects = listOf(
             r(545, 109, 763, 378), // 0: topRight
             r(316, 109, 583, 304), // 1: topMid
-            r(46, 127, 248, 426),  // 2: topLeft
-            r(49, 516, 398, 830),  // 3: midLeft
+            r(46, 127, 248, 426), // 2: topLeft
+            r(49, 516, 398, 830), // 3: midLeft
             r(409, 517, 763, 830), // 4: midRight
-            r(369, 865, 751, 1199),// 5: botRight
+            r(369, 865, 751, 1199), // 5: botRight
             r(49, 866, 358, 1200), // 6: botLeft
         )
         val result = sortIndicesRtl(rects)
@@ -164,7 +164,7 @@ class ReadingOrderSorterTest {
     @Test
     fun `touching panels at boundary`() {
         val rects = listOf(
-            r(0, 0, 800, 400),   // 0: top
+            r(0, 0, 800, 400), // 0: top
             r(0, 400, 800, 800), // 1: bottom
         )
         assertEquals(listOf(0, 1), sortIndicesRtl(rects))
@@ -173,8 +173,8 @@ class ReadingOrderSorterTest {
     @Test
     fun `overlapping panels fall back to positional sort RTL`() {
         val rects = listOf(
-            r(200, 0, 800, 600),  // 0: topRight
-            r(0, 300, 600, 900),  // 1: bottomLeft
+            r(200, 0, 800, 600), // 0: topRight
+            r(0, 300, 600, 900), // 1: bottomLeft
         )
         // Overlap in both X and Y — fallback: sort by top, then right desc
         val result = sortIndicesRtl(rects)
@@ -185,8 +185,8 @@ class ReadingOrderSorterTest {
     @Test
     fun `full width panels sort top to bottom`() {
         val rects = listOf(
-            r(0, 0, 764, 400),    // 0
-            r(0, 410, 764, 700),  // 1
+            r(0, 0, 764, 400), // 0
+            r(0, 410, 764, 700), // 1
             r(0, 710, 764, 1200), // 2
         )
         assertEquals(listOf(0, 1, 2), sortIndicesRtl(rects))
@@ -195,12 +195,12 @@ class ReadingOrderSorterTest {
     @Test
     fun `three rows of two panels RTL`() {
         val rects = listOf(
-            r(0, 0, 380, 350),     // 0: topLeft
-            r(390, 0, 764, 350),   // 1: topRight
-            r(0, 360, 380, 700),   // 2: midLeft
+            r(0, 0, 380, 350), // 0: topLeft
+            r(390, 0, 764, 350), // 1: topRight
+            r(0, 360, 380, 700), // 2: midLeft
             r(390, 360, 764, 700), // 3: midRight
-            r(0, 710, 380, 1200),  // 4: botLeft
-            r(390, 710, 764, 1200),// 5: botRight
+            r(0, 710, 380, 1200), // 4: botLeft
+            r(390, 710, 764, 1200), // 5: botRight
         )
         assertEquals(listOf(1, 0, 3, 2, 5, 4), sortIndicesRtl(rects))
     }
