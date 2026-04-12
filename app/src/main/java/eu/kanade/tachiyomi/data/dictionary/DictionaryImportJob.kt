@@ -66,13 +66,23 @@ class DictionaryImportJob(
                 }.also { tempFile = it }
             }
 
-            val outcome = ParcelFileDescriptor.open(archiveFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
-                ArchiveReader(pfd).use { reader ->
-                    extractAndImportDictionary(reader, archiveFile)
+            try {
+                val outcome = ParcelFileDescriptor.open(
+                    archiveFile,
+                    ParcelFileDescriptor.MODE_READ_ONLY,
+                ).use { pfd ->
+                    ArchiveReader(pfd).use { reader ->
+                        extractAndImportDictionary(reader, archiveFile)
+                    }
                 }
+                importedDictionaryId = outcome.dictionaryId
+            } catch (e: DictionaryImportException.InvalidArchive) {
+                // No index.json — check if this is a ZIP containing nested dictionary ZIPs
+                val enqueued = extractAndEnqueueNestedZips(archiveFile)
+                if (enqueued == 0) throw e
+                logcat(LogPriority.INFO) { "Enqueued $enqueued nested dictionary ZIPs for import" }
             }
 
-            importedDictionaryId = outcome.dictionaryId
             Result.success()
         } catch (e: CancellationException) {
             logcat(LogPriority.INFO) { "Dictionary import cancelled" }
@@ -103,6 +113,24 @@ class DictionaryImportJob(
     }
 
     private suspend fun copyLocalArchive(uri: Uri): File = withContext(Dispatchers.IO) {
+        // For file:// URIs (e.g. from nested ZIP extraction), read directly from the file
+        if (uri.scheme == "file") {
+            val sourceFile = uri.path?.let { File(it) }
+            if (sourceFile == null || !sourceFile.exists()) {
+                throw DictionaryImportException.InvalidArchive("Failed to open dictionary file")
+            }
+            val cacheDir = File(context.cacheDir, "dictionary_imports").apply { mkdirs() }
+            val destination = File(cacheDir, "dictionary_${System.currentTimeMillis()}.zip")
+            sourceFile.inputStream().buffered().use { input ->
+                destination.outputStream().buffered().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            // Clean up the source file from the nested cache
+            runCatching { sourceFile.delete() }
+            return@withContext destination
+        }
+
         val file = UniFile.fromUri(context, uri)
             ?: throw DictionaryImportException.InvalidArchive("Failed to open dictionary file")
 
@@ -208,11 +236,38 @@ class DictionaryImportJob(
         }
     }
 
+    /**
+     * Opens the archive and looks for nested .zip entries. Extracts each to a temp file
+     * and enqueues a normal import job for it. Returns the number of ZIPs enqueued.
+     */
+    private suspend fun extractAndEnqueueNestedZips(archiveFile: File): Int = withContext(Dispatchers.IO) {
+        val nestedDir = File(context.cacheDir, NESTED_CACHE_DIR).apply { mkdirs() }
+        var count = 0
+
+        ParcelFileDescriptor.open(archiveFile, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+            ArchiveReader(pfd).use { reader ->
+                reader.useEntriesAndStreams { entry, stream ->
+                    if (entry.isFile && entry.name.endsWith(".zip", ignoreCase = true)) {
+                        val nestedFile = File(nestedDir, "nested_${System.currentTimeMillis()}_$count.zip")
+                        nestedFile.outputStream().buffered().use { output ->
+                            stream.copyTo(output)
+                        }
+                        start(context, Uri.fromFile(nestedFile))
+                        count++
+                    }
+                }
+            }
+        }
+
+        count
+    }
+
     companion object {
         const val TAG = "DictionaryImport"
 
         const val KEY_URI = "uri"
         const val KEY_URL = "url"
+        private const val NESTED_CACHE_DIR = "dictionary_nested"
 
         val TRUSTED_DICTIONARY_HOSTS = setOf(
             "github.com",
