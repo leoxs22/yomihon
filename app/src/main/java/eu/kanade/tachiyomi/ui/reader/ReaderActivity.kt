@@ -1138,6 +1138,12 @@ class ReaderActivity : BaseActivity() {
             val screenRect: android.graphics.RectF,
         )
 
+        data class PositionedSelectionPart(
+            val bitmap: Bitmap,
+            val left: Float,
+            val top: Float,
+        )
+
         val parts = captures.map { capture ->
             CroppedSelectionPart(
                 bitmap = cropPageBitmap(capture.page, capture.sourceRect),
@@ -1146,20 +1152,32 @@ class ReaderActivity : BaseActivity() {
         }
 
         try {
-            val bounds = parts.fold(android.graphics.RectF(parts.first().screenRect)) { acc, part ->
-                acc.apply { union(part.screenRect) }
+            val minLeft = parts.minOf { it.screenRect.left }
+            val minTop = parts.minOf { it.screenRect.top }
+            val positionedParts = parts.map { part ->
+                PositionedSelectionPart(
+                    bitmap = part.bitmap,
+                    left = part.screenRect.left - minLeft,
+                    top = part.screenRect.top - minTop,
+                )
             }
+            val mergedWidth = positionedParts
+                .maxOf { it.left + it.bitmap.width }
+                .toInt()
+                .coerceAtLeast(1)
+            val mergedHeight = positionedParts
+                .maxOf { it.top + it.bitmap.height }
+                .toInt()
+                .coerceAtLeast(1)
             val mergedBitmap = Bitmap.createBitmap(
-                bounds.width().toInt().coerceAtLeast(1),
-                bounds.height().toInt().coerceAtLeast(1),
+                mergedWidth,
+                mergedHeight,
                 Bitmap.Config.ARGB_8888,
             )
             val canvas = android.graphics.Canvas(mergedBitmap)
 
-            parts.forEach { part ->
-                val left = part.screenRect.left - bounds.left
-                val top = part.screenRect.top - bounds.top
-                canvas.drawBitmap(part.bitmap, left, top, null)
+            positionedParts.forEach { part ->
+                canvas.drawBitmap(part.bitmap, part.left, part.top, null)
             }
 
             return mergedBitmap
