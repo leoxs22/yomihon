@@ -70,10 +70,8 @@ import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
-import eu.kanade.tachiyomi.data.database.models.toDomainChapter
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.data.ocr.OcrPageSourceResolver
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
@@ -150,7 +148,7 @@ class ReaderActivity : BaseActivity() {
     private val dictionaryPreferences = Injekt.get<DictionaryPreferences>()
     private val ankiDroidPreferences = Injekt.get<AnkiDroidPreferences>()
     private val imageSaver = Injekt.get<ImageSaver>()
-    private val ocrPageSourceResolver = Injekt.get<OcrPageSourceResolver>()
+    private val selectionBitmapCropper = Injekt.get<ReaderSelectionCropper>()
     private val dictionarySearchScreenModel by lazy { DictionarySearchScreenModel() }
 
     lateinit var binding: ReaderActivityBinding
@@ -480,7 +478,6 @@ class ReaderActivity : BaseActivity() {
 
                         if (abs(right - left) > 20 && abs(bottom - top) > 20) {
                             handleSelectedRegion(
-                                start = start,
                                 rect = android.graphics.RectF(left, top, right, bottom),
                             )
                             resetOcrDrag()
@@ -988,37 +985,21 @@ class ReaderActivity : BaseActivity() {
     }
 
     private fun handleSelectedRegion(
-        start: Offset,
         rect: android.graphics.RectF,
     ) {
         when (val action = selectionAction) {
-            SelectionAction.ProcessOcr -> captureRegionForOcr(start, rect)
-            is SelectionAction.ExportImageToAnki -> captureRegionForAnkiExport(start, rect, action.terms)
+            SelectionAction.ProcessOcr -> captureRegionForOcr(rect)
+            is SelectionAction.ExportImageToAnki -> captureRegionForAnkiExport(rect, action.terms)
         }
     }
 
     private fun captureRegionForAnkiExport(
-        start: Offset,
         rect: android.graphics.RectF,
         terms: List<DictionaryTerm>,
     ) {
         lifecycleScope.launchIO {
             try {
-                val captures = withUIContext {
-                    val resolvedCaptures = viewModel.state.value.viewer?.resolveSelectionCaptures(
-                        ReaderSelectionRegion(
-                            screenRect = dialogRootRectToScreenRect(rect),
-                            anchorScreenPoint = dialogRootOffsetToScreenPoint(start),
-                        ),
-                    )
-                    if (!resolvedCaptures.isNullOrEmpty()) {
-                        exitOcrMode()
-                    }
-                    resolvedCaptures
-                }.orEmpty()
-                    .takeIf { it.isNotEmpty() }
-                    ?: throw IllegalStateException("Failed to resolve current page region")
-                val croppedBitmap = cropSelectionBitmap(captures)
+                val croppedBitmap = cropCurrentSelectionBitmap(rect)
 
                 try {
                     val uri = imageSaver.save(
@@ -1045,26 +1026,11 @@ class ReaderActivity : BaseActivity() {
     }
 
     private fun captureRegionForOcr(
-        start: Offset,
         rect: android.graphics.RectF,
     ) {
         lifecycleScope.launchIO {
             try {
-                val captures = withUIContext {
-                    val resolvedCaptures = viewModel.state.value.viewer?.resolveSelectionCaptures(
-                        ReaderSelectionRegion(
-                            screenRect = dialogRootRectToScreenRect(rect),
-                            anchorScreenPoint = dialogRootOffsetToScreenPoint(start),
-                        ),
-                    )
-                    if (!resolvedCaptures.isNullOrEmpty()) {
-                        exitOcrMode()
-                    }
-                    resolvedCaptures
-                }.orEmpty()
-                    .takeIf { it.isNotEmpty() }
-                    ?: throw IllegalStateException("Failed to resolve current page region")
-                val croppedBitmap = cropSelectionBitmap(captures)
+                val croppedBitmap = cropCurrentSelectionBitmap(rect)
 
                 // The ViewModel takes ownership of the bitmap for OCR processing.
                 viewModel.processOcrRegion(croppedBitmap)
@@ -1078,125 +1044,36 @@ class ReaderActivity : BaseActivity() {
         }
     }
 
-    private suspend fun cropPageBitmap(
-        page: ReaderPage,
-        sourceRect: android.graphics.Rect,
+    private suspend fun cropCurrentSelectionBitmap(
+        rect: android.graphics.RectF,
     ): Bitmap {
+        val captures = resolveSelectionCaptures(rect)
         val manga = viewModel.manga ?: throw IllegalStateException("Manga unavailable")
-        val chapter = page.chapter.chapter.toDomainChapter()
-            ?: throw IllegalStateException("Chapter unavailable")
-        val fullBitmap = ocrPageSourceResolver.openPageBitmap(manga, chapter, page.index)
-            ?: throw IllegalStateException("Failed to decode page bitmap")
-
-        try {
-            val safeRect = android.graphics.Rect(
-                sourceRect.left.coerceIn(0, fullBitmap.width),
-                sourceRect.top.coerceIn(0, fullBitmap.height),
-                sourceRect.right.coerceIn(0, fullBitmap.width),
-                sourceRect.bottom.coerceIn(0, fullBitmap.height),
-            )
-            if (safeRect.width() <= 0 || safeRect.height() <= 0) {
-                throw IllegalStateException("Invalid crop rectangle")
-            }
-
-            val croppedBitmap = Bitmap.createBitmap(
-                fullBitmap,
-                safeRect.left,
-                safeRect.top,
-                safeRect.width(),
-                safeRect.height(),
-            )
-            if (croppedBitmap === fullBitmap) {
-                return fullBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                    ?: throw IllegalStateException("Failed to copy full-page crop bitmap")
-            }
-
-            return croppedBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                ?.also {
-                    if (!croppedBitmap.isRecycled) {
-                        croppedBitmap.recycle()
-                    }
-                }
-                ?: throw IllegalStateException("Failed to copy cropped page bitmap")
-        } finally {
-            if (!fullBitmap.isRecycled) {
-                fullBitmap.recycle()
-            }
-        }
+        return selectionBitmapCropper.cropSelectionBitmap(manga, captures)
     }
 
-    private suspend fun cropSelectionBitmap(
-        captures: List<ReaderSelectionCapture>,
-    ): Bitmap {
-        if (captures.size == 1) {
-            val capture = captures.first()
-            return cropPageBitmap(capture.page, capture.sourceRect)
-        }
-
-        data class CroppedSelectionPart(
-            val bitmap: Bitmap,
-            val screenRect: android.graphics.RectF,
-        )
-
-        data class PositionedSelectionPart(
-            val bitmap: Bitmap,
-            val left: Float,
-            val top: Float,
-        )
-
-        val parts = captures.map { capture ->
-            CroppedSelectionPart(
-                bitmap = cropPageBitmap(capture.page, capture.sourceRect),
-                screenRect = capture.screenRect,
+    private suspend fun resolveSelectionCaptures(
+        rect: android.graphics.RectF,
+    ): List<ReaderSelectionCapture> {
+        val screenRect = dialogRootRectToScreenRect(rect)
+        val captures = withUIContext {
+            val resolvedCaptures = viewModel.state.value.viewer?.resolveSelectionCaptures(
+                ReaderSelectionRegion(screenRect = screenRect),
             )
+            if (!resolvedCaptures.isNullOrEmpty()) {
+                exitOcrMode()
+            }
+            resolvedCaptures
         }
+            .orEmpty()
+            .takeIf { it.isNotEmpty() }
+            ?: throw IllegalStateException("Failed to resolve current page region")
 
-        try {
-            val minLeft = parts.minOf { it.screenRect.left }
-            val minTop = parts.minOf { it.screenRect.top }
-            val positionedParts = parts.map { part ->
-                PositionedSelectionPart(
-                    bitmap = part.bitmap,
-                    left = part.screenRect.left - minLeft,
-                    top = part.screenRect.top - minTop,
-                )
-            }
-            val mergedWidth = positionedParts
-                .maxOf { it.left + it.bitmap.width }
-                .toInt()
-                .coerceAtLeast(1)
-            val mergedHeight = positionedParts
-                .maxOf { it.top + it.bitmap.height }
-                .toInt()
-                .coerceAtLeast(1)
-            val mergedBitmap = Bitmap.createBitmap(
-                mergedWidth,
-                mergedHeight,
-                Bitmap.Config.ARGB_8888,
-            )
-            val canvas = android.graphics.Canvas(mergedBitmap)
-
-            positionedParts.forEach { part ->
-                canvas.drawBitmap(part.bitmap, part.left, part.top, null)
-            }
-
-            return mergedBitmap
-        } finally {
-            parts.forEach { part ->
-                if (!part.bitmap.isRecycled) {
-                    part.bitmap.recycle()
-                }
-            }
+        logcat(LogPriority.DEBUG) {
+            "Selection resolved ${captures.size} capture(s) for screenRect=" +
+                "${screenRect.left},${screenRect.top},${screenRect.right},${screenRect.bottom}"
         }
-    }
-
-    private fun dialogRootOffsetToScreenPoint(start: Offset): android.graphics.PointF {
-        val location = IntArray(2)
-        binding.dialogRoot.getLocationOnScreen(location)
-        return android.graphics.PointF(
-            location[0] + start.x,
-            location[1] + start.y,
-        )
+        return captures
     }
 
     fun showOcrResult(selection: ReaderOcrRegionSelection) {

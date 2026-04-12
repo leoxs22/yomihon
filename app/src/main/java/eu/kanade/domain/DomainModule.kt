@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.data.ocr.OcrQueueActions
 import eu.kanade.tachiyomi.data.ocr.OcrScanManager
 import eu.kanade.tachiyomi.data.ocr.OcrScanNotifier
 import eu.kanade.tachiyomi.data.ocr.OcrScanStore
+import eu.kanade.tachiyomi.ui.reader.ReaderSelectionCropper
 import mihon.data.ankidroid.AnkiDroidRepositoryImpl
 import mihon.data.dictionary.DictionaryParserImpl
 import mihon.data.dictionary.DictionaryRepositoryImpl
@@ -291,6 +292,7 @@ class DomainModule : InjektModule {
         addSingletonFactory { OcrScanStore(get<Application>(), get()) }
         addSingletonFactory<OcrPageSourceGateway> { OcrPageSourceGatewayImpl(get<Application>(), get(), get()) }
         addSingletonFactory { OcrPageSourceResolver(get(), get(), get()) }
+        addSingletonFactory { ReaderSelectionCropper(get()) }
         addSingletonFactory { OcrScanNotifier(get<Application>()) }
         addSingletonFactory { OcrChapterScanner(get<Application>(), get(), get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { OcrScanManager(get<Application>(), get(), get(), get()) }
