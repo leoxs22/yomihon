@@ -43,9 +43,7 @@ Yomihon takes the features of Mihon and enhances them with advanced tools for la
 
 Core Reader Features:
 
-* [OCR support](https://huggingface.co/bluolightning/manga-ocr-tflite) 
-* Experimental on-device panel detection support.
-* Partial Yomitan dictionary support.
+* Experimental offline panel-by-panel reading.
 * Local reading of content.
 * A configurable reader with multiple viewers, reading directions and other settings.
 * Tracker support: [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.app/), [MangaUpdates](https://mangaupdates.com), [Shikimori](https://shikimori.one), and [Bangumi](https://bgm.tv/) support.
