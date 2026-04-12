@@ -209,7 +209,12 @@ class PagerPageHolder(
                 } else {
                     null
                 }
-                LoadResult(source, isAnimated, background)
+                val panelBitmap = if (!isAnimated && viewer.config.panelNavigation) {
+                    decodePanelBitmap(source)
+                } else {
+                    null
+                }
+                LoadResult(source, isAnimated, background, panelBitmap)
             }
             withUIContext {
                 setImage(
@@ -240,6 +245,7 @@ class PagerPageHolder(
 
     private fun maybeStartPanelDetection(loadResult: LoadResult) {
         if (!viewer.config.panelNavigation || loadResult.isAnimated) {
+            loadResult.panelBitmap?.bitmap?.recycle()
             setPanelDebugDetections(emptyList())
             logcat(LogPriority.VERBOSE) {
                 "Panel nav detection skipped index=${page.index} enabled=${viewer.config.panelNavigation} animated=${loadResult.isAnimated}"
@@ -249,14 +255,13 @@ class PagerPageHolder(
 
         val generation = panelDetectionGeneration
         val cacheKey = panelDetectionCacheKey()
-        val streamFn = page.stream
-        if (streamFn == null) {
-            logcat(LogPriority.VERBOSE) { "Panel nav detection skipped index=${page.index}: no stream" }
+        val decoded = loadResult.panelBitmap
+        if (decoded == null) {
+            logcat(LogPriority.VERBOSE) { "Panel nav detection skipped index=${page.index}: no processed panel bitmap" }
             return
         }
 
         panelDetectionJob = scope.launchIO {
-            val decoded = decodePanelBitmap(streamFn) ?: return@launchIO
             val result = try {
                 detectPanels.await(
                     cacheKey = cacheKey,
@@ -293,11 +298,11 @@ class PagerPageHolder(
         }
     }
 
-    private fun decodePanelBitmap(streamFn: () -> java.io.InputStream): DecodedPanelBitmap? {
+    private fun decodePanelBitmap(source: BufferedSource): DecodedPanelBitmap? {
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        streamFn().use {
+        source.peek().inputStream().use {
             BitmapFactory.decodeStream(it, null, options)
         }
 
@@ -310,7 +315,7 @@ class PagerPageHolder(
         val sampleSize = generateSequence(1) { it * 2 }
             .first { largestDimension / it <= 800 }
 
-        val bitmap = streamFn().use {
+        val bitmap = source.peek().inputStream().use {
             BitmapFactory.decodeStream(
                 it,
                 null,
@@ -576,6 +581,7 @@ private data class LoadResult(
     val source: BufferedSource,
     val isAnimated: Boolean,
     val background: Drawable?,
+    val panelBitmap: DecodedPanelBitmap?,
 )
 
 private data class DecodedPanelBitmap(
