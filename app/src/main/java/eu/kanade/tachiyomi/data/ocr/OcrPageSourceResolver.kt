@@ -23,6 +23,22 @@ internal class OcrPageSourceResolver(
     private val downloadManager: DownloadManager,
     private val pageSourceGateway: OcrPageSourceGateway,
 ) {
+    suspend fun openPageBitmap(
+        manga: Manga,
+        chapter: Chapter,
+        pageIndex: Int,
+    ): Bitmap? {
+        val resolvedPages = resolve(manga, chapter)
+        return try {
+            resolvedPages.pages
+                .firstOrNull { it.pageIndex == pageIndex }
+                ?.openBitmap
+                ?.invoke()
+        } finally {
+            resolvedPages.close()
+        }
+    }
+
     suspend fun resolve(
         manga: Manga,
         chapter: Chapter,

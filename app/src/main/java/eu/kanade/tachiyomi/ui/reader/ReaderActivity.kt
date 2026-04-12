@@ -8,7 +8,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -71,9 +70,10 @@ import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
+import eu.kanade.tachiyomi.data.database.models.toDomainChapter
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.data.ocr.decodeArchiveBitmap
+import eu.kanade.tachiyomi.data.ocr.OcrPageSourceResolver
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
@@ -128,7 +128,6 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -150,6 +149,7 @@ class ReaderActivity : BaseActivity() {
     private val dictionaryPreferences = Injekt.get<DictionaryPreferences>()
     private val ankiDroidPreferences = Injekt.get<AnkiDroidPreferences>()
     private val imageSaver = Injekt.get<ImageSaver>()
+    private val ocrPageSourceResolver = Injekt.get<OcrPageSourceResolver>()
     private val dictionarySearchScreenModel by lazy { DictionarySearchScreenModel() }
 
     lateinit var binding: ReaderActivityBinding
@@ -1073,11 +1073,15 @@ class ReaderActivity : BaseActivity() {
         }
     }
 
-    private fun cropPageBitmap(
+    private suspend fun cropPageBitmap(
         page: ReaderPage,
         sourceRect: android.graphics.Rect,
     ): Bitmap {
-        val fullBitmap = openPageBitmap(page) ?: throw IllegalStateException("Failed to decode page bitmap")
+        val manga = viewModel.manga ?: throw IllegalStateException("Manga unavailable")
+        val chapter = page.chapter.chapter.toDomainChapter()
+            ?: throw IllegalStateException("Chapter unavailable")
+        val fullBitmap = ocrPageSourceResolver.openPageBitmap(manga, chapter, page.index)
+            ?: throw IllegalStateException("Failed to decode page bitmap")
 
         try {
             val safeRect = android.graphics.Rect(
@@ -1114,27 +1118,6 @@ class ReaderActivity : BaseActivity() {
                 fullBitmap.recycle()
             }
         }
-    }
-
-    private fun openPageBitmap(page: ReaderPage): Bitmap? {
-        val stream = page.stream ?: throw IllegalStateException("Page stream unavailable")
-        val isLocalPage = page.chapter.pageLoader?.isLocal == true
-        return if (isLocalPage) {
-            stream().use(::decodeArchiveBitmap)
-        } else {
-            stream().use(::decodeBitmap)
-                ?: stream().use(::decodeArchiveBitmap)
-        }
-    }
-
-    private fun decodeBitmap(stream: InputStream): Bitmap? {
-        return BitmapFactory.decodeStream(
-            stream,
-            null,
-            BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            },
-        )
     }
 
     private fun dialogRootOffsetToScreenPoint(start: Offset): android.graphics.PointF {
