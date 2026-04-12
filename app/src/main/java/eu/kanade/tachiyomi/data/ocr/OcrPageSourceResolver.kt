@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.ocr
 
 import android.graphics.Bitmap
+import android.graphics.Rect
 import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.model.Download
@@ -16,6 +17,7 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.source.local.LocalSource
+import java.io.InputStream
 import kotlin.time.Duration.Companion.seconds
 
 internal class OcrPageSourceResolver(
@@ -23,22 +25,6 @@ internal class OcrPageSourceResolver(
     private val downloadManager: DownloadManager,
     private val pageSourceGateway: OcrPageSourceGateway,
 ) {
-    suspend fun openPageBitmap(
-        manga: Manga,
-        chapter: Chapter,
-        pageIndex: Int,
-    ): Bitmap? {
-        val resolvedPages = resolve(manga, chapter)
-        return try {
-            resolvedPages.pages
-                .firstOrNull { it.pageIndex == pageIndex }
-                ?.openBitmap
-                ?.invoke()
-        } finally {
-            resolvedPages.close()
-        }
-    }
-
     suspend fun resolve(
         manga: Manga,
         chapter: Chapter,
@@ -120,19 +106,32 @@ internal class OcrPageSourceResolver(
                 OcrPageInput(
                     pageIndex = page.index,
                     openBitmap = {
-                        withIOContext {
-                            if (page.imageUrl.isNullOrBlank()) {
-                                page.imageUrl = source.getImageUrl(page)
-                            }
-                            source.getImage(page).use { response ->
-                                decodeBitmap(response.body.byteStream())
-                            }
+                        openRemotePageBitmap(page, source, ::decodeBitmap)
+                    },
+                    openBitmapRegion = { sourceRect ->
+                        openRemotePageBitmap(page, source) { stream ->
+                            decodeBitmapRegion(stream, sourceRect)
                         }
                     },
                 )
             }
 
         return ResolvedOcrPages(pages)
+    }
+
+    private suspend fun <T> openRemotePageBitmap(
+        page: Page,
+        source: HttpSource,
+        decode: (InputStream) -> T?,
+    ): T? {
+        return withIOContext {
+            if (page.imageUrl.isNullOrBlank()) {
+                page.imageUrl = source.getImageUrl(page)
+            }
+            source.getImage(page).use { response ->
+                decode(response.body.byteStream())
+            }
+        }
     }
 }
 
@@ -141,12 +140,17 @@ private val DOWNLOAD_WAIT_TIMEOUT = 15.seconds
 internal data class OcrPageInput(
     val pageIndex: Int,
     val openBitmap: suspend () -> Bitmap?,
+    val openBitmapRegion: suspend (Rect) -> Bitmap?,
 )
 
 internal class ResolvedOcrPages(
     val pages: List<OcrPageInput>,
     private val closeBlock: () -> Unit = {},
 ) : AutoCloseable {
+    fun getPageInput(pageIndex: Int): OcrPageInput? {
+        return pages.firstOrNull { it.pageIndex == pageIndex }
+    }
+
     override fun close() {
         closeBlock()
     }

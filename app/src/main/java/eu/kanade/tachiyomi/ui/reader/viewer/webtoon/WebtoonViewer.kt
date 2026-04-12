@@ -275,7 +275,12 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                 if (!child.matchesOcrPage(pageIdentity)) return@mapNotNull null
 
                 val sourceRect = child.sourceRectForScreenRect(intersection) ?: return@mapNotNull null
-                ReaderSelectionCapture(page, sourceRect, intersection)
+                ReaderSelectionCapture(
+                    page = page,
+                    sourceRect = sourceRect,
+                    screenRect = intersection,
+                    bitmapSource = child,
+                )
             }
             .toList()
             .sortedWith(compareBy<ReaderSelectionCapture> { it.screenRect.top }.thenBy { it.screenRect.left })

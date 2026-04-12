@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
@@ -44,6 +45,8 @@ import com.google.android.material.color.MaterialColors
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.coil.cropBorders
 import eu.kanade.tachiyomi.data.coil.customDecoder
+import eu.kanade.tachiyomi.data.ocr.decodeArchiveBitmapRegion
+import eu.kanade.tachiyomi.data.ocr.decodeBitmapRegion
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
@@ -78,7 +81,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @AttrRes defStyleAttrs: Int = 0,
     @StyleRes defStyleRes: Int = 0,
     private val isWebtoon: Boolean = false,
-) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes) {
+) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes), ReaderSelectionBitmapSource {
 
     private val alwaysDecodeLongStripWithSSIV by lazy {
         Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
@@ -97,6 +100,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private var activeOcrOverlay: ReaderActiveOcrOverlay? = null
     private var activeOverlayLayout: ReaderOcrOverlayLayout? = null
     private var pendingOnPageReadyDirection: Boolean? = null
+    private var loadedPageSource: BufferedSource? = null
 
     private val ocrOverlayBackgroundPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -360,6 +364,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(drawable: Drawable, config: Config) {
         this.config = config
+        loadedPageSource = null
         if (drawable is Animatable) {
             prepareAnimatedImageView()
             setAnimatedImage(drawable, config)
@@ -371,6 +376,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(source: BufferedSource, isAnimated: Boolean, config: Config) {
         this.config = config
+        loadedPageSource = source.takeIf { !isAnimated }
         if (isAnimated) {
             prepareAnimatedImageView()
             setAnimatedImage(source, config)
@@ -384,12 +390,23 @@ open class ReaderPageImageView @JvmOverloads constructor(
         clearOcrPageIdentity()
         clearCachedOcrResult()
         fileCropRect = null
+        loadedPageSource = null
         when (it) {
             is SubsamplingScaleImageView -> it.recycle()
             is AppCompatImageView -> it.dispose()
         }
         it.isVisible = false
         panelDebugOverlay.setDetections(emptyList(), emptyList(), null, null)
+    }
+
+    override fun decodeSelectionBitmap(sourceRect: Rect): Bitmap? {
+        val source = loadedPageSource ?: return null
+        return try {
+            source.peek().inputStream().use { stream -> decodeBitmapRegion(stream, sourceRect) }
+                ?: source.peek().inputStream().use { stream -> decodeArchiveBitmapRegion(stream, sourceRect) }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun setOcrPageIdentity(
@@ -812,15 +829,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     private fun rawPointToLocalPoint(rawX: Float, rawY: Float): PointF? {
-        val globalMatrix = Matrix()
-        transformMatrixToGlobal(globalMatrix)
-
-        val inverse = Matrix()
-        if (!globalMatrix.invert(inverse)) return null
-
-        val points = floatArrayOf(rawX, rawY)
-        inverse.mapPoints(points)
-        return PointF(points[0], points[1])
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return PointF(rawX - location[0], rawY - location[1])
     }
 
     private fun screenRectToLocalRect(screenRect: RectF): RectF? {
@@ -900,9 +911,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
         pageResult: OcrPageResult,
     ): RectF? {
         val localRect = boundingBoxToDisplayedRect(boundingBox, pageResult) ?: return null
-        val globalMatrix = Matrix()
-        transformMatrixToGlobal(globalMatrix)
-        return RectF(localRect).also(globalMatrix::mapRect)
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return RectF(localRect).apply { offset(location[0].toFloat(), location[1].toFloat()) }
     }
 
     private fun boundingBoxToDisplayedRect(

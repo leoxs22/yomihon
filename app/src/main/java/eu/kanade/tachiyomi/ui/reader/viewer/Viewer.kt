@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
-import android.graphics.PointF
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.graphics.RectF
 import android.view.KeyEvent
@@ -9,15 +9,23 @@ import android.view.View
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 
+interface ReaderSelectionBitmapSource {
+    fun decodeSelectionBitmap(sourceRect: Rect): Bitmap?
+}
+
 data class ReaderSelectionCapture(
     val page: ReaderPage,
     val sourceRect: Rect,
     val screenRect: RectF,
-)
+    val bitmapSource: ReaderSelectionBitmapSource? = null,
+) {
+    fun decodeBitmap(): Bitmap? {
+        return bitmapSource?.decodeSelectionBitmap(sourceRect)
+    }
+}
 
 data class ReaderSelectionRegion(
     val screenRect: RectF,
-    val anchorScreenPoint: PointF,
 )
 
 /**

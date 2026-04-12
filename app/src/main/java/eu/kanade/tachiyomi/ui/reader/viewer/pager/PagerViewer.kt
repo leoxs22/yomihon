@@ -227,7 +227,12 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
                 val page = holder.item as? ReaderPage ?: return@mapNotNull null
                 val sourceRect = holder.sourceRectForScreenRect(intersection) ?: return@mapNotNull null
-                ReaderSelectionCapture(page, sourceRect, intersection)
+                ReaderSelectionCapture(
+                    page = page,
+                    sourceRect = sourceRect,
+                    screenRect = intersection,
+                    bitmapSource = holder,
+                )
             }
             .toList()
             .sortedWith(compareBy<ReaderSelectionCapture> { it.screenRect.top }.thenBy { it.screenRect.left })
