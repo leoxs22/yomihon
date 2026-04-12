@@ -1090,7 +1090,25 @@ class ReaderActivity : BaseActivity() {
                 throw IllegalStateException("Invalid crop rectangle")
             }
 
-            return Bitmap.createBitmap(fullBitmap, safeRect.left, safeRect.top, safeRect.width(), safeRect.height())
+            val croppedBitmap = Bitmap.createBitmap(
+                fullBitmap,
+                safeRect.left,
+                safeRect.top,
+                safeRect.width(),
+                safeRect.height(),
+            )
+            if (croppedBitmap === fullBitmap) {
+                return fullBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    ?: throw IllegalStateException("Failed to copy full-page crop bitmap")
+            }
+
+            return croppedBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                ?.also {
+                    if (!croppedBitmap.isRecycled) {
+                        croppedBitmap.recycle()
+                    }
+                }
+                ?: throw IllegalStateException("Failed to copy cropped page bitmap")
         } finally {
             if (!fullBitmap.isRecycled) {
                 fullBitmap.recycle()
@@ -1100,8 +1118,13 @@ class ReaderActivity : BaseActivity() {
 
     private fun openPageBitmap(page: ReaderPage): Bitmap? {
         val stream = page.stream ?: throw IllegalStateException("Page stream unavailable")
-        return stream().use(::decodeBitmap)
-            ?: stream().use(::decodeArchiveBitmap)
+        val isLocalPage = page.chapter.pageLoader?.isLocal == true
+        return if (isLocalPage) {
+            stream().use(::decodeArchiveBitmap)
+        } else {
+            stream().use(::decodeBitmap)
+                ?: stream().use(::decodeArchiveBitmap)
+        }
     }
 
     private fun decodeBitmap(stream: InputStream): Bitmap? {
