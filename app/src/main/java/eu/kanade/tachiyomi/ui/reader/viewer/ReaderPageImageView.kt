@@ -596,13 +596,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
             is BufferedSource -> {
                 if (!isWebtoon || alwaysDecodeLongStripWithSSIV) {
                     setHardwareConfig(ImageUtil.canUseHardwareBitmap(data))
-                    setImage(ImageSource.inputStream(data.inputStream()))
+                    setImage(ImageSource.inputStream(data.peek().inputStream()))
                     isVisible = true
                     return@apply
                 }
 
                 ImageRequest.Builder(context)
-                    .data(data)
+                    .data(data.peek())
                     .memoryCachePolicy(CachePolicy.DISABLED)
                     .diskCachePolicy(CachePolicy.DISABLED)
                     .target(
