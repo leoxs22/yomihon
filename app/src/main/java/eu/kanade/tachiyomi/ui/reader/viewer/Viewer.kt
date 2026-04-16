@@ -1,10 +1,32 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.graphics.RectF
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+
+interface ReaderSelectionBitmapSource {
+    fun decodeSelectionBitmap(sourceRect: Rect): Bitmap?
+}
+
+data class ReaderSelectionCapture(
+    val page: ReaderPage,
+    val sourceRect: Rect,
+    val screenRect: RectF,
+    val bitmapSource: ReaderSelectionBitmapSource? = null,
+) {
+    fun decodeBitmap(): Bitmap? {
+        return bitmapSource?.decodeSelectionBitmap(sourceRect)
+    }
+}
+
+data class ReaderSelectionRegion(
+    val screenRect: RectF,
+)
 
 /**
  * Interface for implementing a viewer.
@@ -49,4 +71,6 @@ interface Viewer {
      * Returns true when the overlay is applied to a visible page or when [overlay] is null.
      */
     fun setActiveOcrOverlay(overlay: ReaderActiveOcrOverlay?): Boolean = overlay == null
+
+    fun resolveSelectionCaptures(region: ReaderSelectionRegion): List<ReaderSelectionCapture> = emptyList()
 }

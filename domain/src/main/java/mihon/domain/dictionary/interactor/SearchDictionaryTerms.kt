@@ -22,6 +22,22 @@ class SearchDictionaryTerms(
     private val dictionaryRepository: DictionaryRepository,
     private val dictionarySearchGateway: DictionarySearchGateway,
 ) {
+    private data class NormalizedText(
+        val text: String,
+        val sourceOffsets: IntArray,
+        val sourceLengths: IntArray,
+    ) {
+        fun sourceRange(start: Int, length: Int): Pair<Int, Int> {
+            if (length <= 0 || text.isEmpty()) return 0 to 0
+
+            val clampedStart = start.coerceIn(0, text.lastIndex)
+            val clampedEndExclusive = (clampedStart + length).coerceIn(clampedStart + 1, text.length)
+            val sourceStart = sourceOffsets[clampedStart]
+            val sourceEnd = sourceOffsets[clampedEndExclusive - 1] + sourceLengths[clampedEndExclusive - 1]
+            return sourceStart to (sourceEnd - sourceStart)
+        }
+    }
+
     data class FirstWordMatch(
         val word: String,
         val sourceOffset: Int,
@@ -128,9 +144,10 @@ class SearchDictionaryTerms(
         if (dictionaryIds.isEmpty()) return emptyList()
 
         val context = buildSearchContext(dictionaryIds)
-        val normalizedQuery = query.trim { it in punctuationCharSet || it.isWhitespace() }
+        val trimmedQuery = query.trim { it in punctuationCharSet || it.isWhitespace() }
         val allowedScripts = getAllowedScripts(dictionaryIds, context)
-        val script = resolveScript(normalizedQuery, parserLanguage, allowedScripts)
+        val script = resolveScript(trimmedQuery, parserLanguage, allowedScripts)
+        val normalizedQuery = normalizeForSearch(trimmedQuery, script).text
         val isJapaneseAllowed = allowedScripts == null || Script.JAPANESE in allowedScripts
 
         val primaryResult = when (script) {
@@ -361,11 +378,11 @@ class SearchDictionaryTerms(
         val (leadingTrimmedCount, sanitized) = stripLeadingPunctuation(sentence)
         if (sanitized.isEmpty()) return FirstWordMatch("", leadingTrimmedCount, 0)
 
-        val normalized = convertToKana(sanitized)
-        val actualMaxLength = minOf(normalized.length, MAX_WORD_LENGTH)
+        val normalized = normalizeForSearch(sanitized, Script.JAPANESE)
+        val actualMaxLength = minOf(normalized.text.length, MAX_WORD_LENGTH)
 
         for (len in actualMaxLength downTo 1) {
-            val substring = normalized.take(len)
+            val substring = normalized.text.take(len)
 
             val candidates = JapaneseDeinflector.deinflect(substring)
             for (candidate in candidates) {
@@ -380,16 +397,24 @@ class SearchDictionaryTerms(
                     }
 
                     if (matches.any { dbTerm -> isValidMatch(dbTerm, candidatesForTerm) }) {
-                        val sourceLength = mapSourceLength(sanitized, substring)
-                        return FirstWordMatch(substring, leadingTrimmedCount, sourceLength, true)
+                        return createJapaneseWordMatch(
+                            sanitized = sanitized,
+                            leadingTrimmedCount = leadingTrimmedCount,
+                            word = substring,
+                            isDictionaryMatch = true,
+                        )
                     }
                 }
             }
         }
 
-        val fallbackLength = mapSourceLength(sanitized, normalized.take(1))
-        val fallbackWord = normalized.take(1)
-        return FirstWordMatch(fallbackWord, leadingTrimmedCount, fallbackLength, false)
+        val fallbackWord = normalized.text.take(1)
+        return createJapaneseWordMatch(
+            sanitized = sanitized,
+            leadingTrimmedCount = leadingTrimmedCount,
+            word = fallbackWord,
+            isDictionaryMatch = false,
+        )
     }
 
     private suspend fun firstWordJa(
@@ -422,29 +447,28 @@ class SearchDictionaryTerms(
         val (leadingTrimmedCount, sanitized) = stripLeadingPunctuation(sentence)
         if (sanitized.isEmpty()) return FirstWordMatch("", leadingTrimmedCount, 0)
 
-        val normalized = convertToKana(sanitized)
+        val normalized = normalizeForSearch(sanitized, Script.JAPANESE)
         val lookupResults = dictionarySearchGateway.lookup(
-            text = normalized,
+            text = normalized.text,
             dictionaryIds = dictionaryIds,
             maxResults = MAX_RESULTS,
         )
 
         if (lookupResults.isNotEmpty()) {
             val best = lookupResults.first()
-            val sourceLength = mapSourceLength(sanitized, best.matched)
-            return FirstWordMatch(
+            return createJapaneseWordMatch(
+                sanitized = sanitized,
+                leadingTrimmedCount = leadingTrimmedCount,
                 word = best.matched,
-                sourceOffset = leadingTrimmedCount,
-                sourceLength = sourceLength,
                 isDictionaryMatch = true,
             )
         }
 
-        val fallbackWord = normalized.take(1)
-        return FirstWordMatch(
+        val fallbackWord = normalized.text.take(1)
+        return createJapaneseWordMatch(
+            sanitized = sanitized,
+            leadingTrimmedCount = leadingTrimmedCount,
             word = fallbackWord,
-            sourceOffset = leadingTrimmedCount,
-            sourceLength = mapSourceLength(sanitized, fallbackWord),
             isDictionaryMatch = false,
         )
     }
@@ -496,14 +520,17 @@ class SearchDictionaryTerms(
         val (leadingTrimmedCount, sanitized) = stripLeadingPunctuation(sentence)
         if (sanitized.isEmpty()) return FirstWordMatch("", leadingTrimmedCount, 0)
 
-        val maxLength = minOf(sanitized.length, 40)
+        val normalized = if (script.isNonCjk()) null else normalizeForSearch(sanitized, script)
+        val searchText = normalized?.text ?: sanitized
+        val maxLength = minOf(searchText.length, 40)
 
         for (len in maxLength downTo 1) {
-            val substring = sanitized.take(len)
+            val substring = searchText.take(len)
             if (len > 1 && substring.last().isWhitespace()) continue
 
             if (queryCandidates(substring, false, dictionaryIds).isNotEmpty()) {
-                return FirstWordMatch(substring, leadingTrimmedCount, len, true)
+                val (sourceOffset, sourceLength) = normalized?.sourceRange(0, len) ?: (0 to len)
+                return FirstWordMatch(substring, leadingTrimmedCount + sourceOffset, sourceLength, true)
             }
 
             if (script == Script.ENGLISH) {
@@ -515,8 +542,9 @@ class SearchDictionaryTerms(
         }
 
         val fallbackLength = if (script.isNonCjk()) calcFallbackWordLen(sanitized) else 1
-        val fallbackWord = sanitized.take(fallbackLength)
-        return FirstWordMatch(fallbackWord, leadingTrimmedCount, fallbackLength, false)
+        val fallbackWord = searchText.take(fallbackLength)
+        val (sourceOffset, sourceLength) = normalized?.sourceRange(0, fallbackLength) ?: (0 to fallbackLength)
+        return FirstWordMatch(fallbackWord, leadingTrimmedCount + sourceOffset, sourceLength, false)
     }
 
     private suspend fun queryCandidates(
@@ -653,19 +681,113 @@ class SearchDictionaryTerms(
         }
     }
 
-    private fun mapSourceLength(source: String, normalizedPrefix: String): Int {
+    private fun createJapaneseWordMatch(
+        sanitized: String,
+        leadingTrimmedCount: Int,
+        word: String,
+        isDictionaryMatch: Boolean,
+    ): FirstWordMatch {
+        return FirstWordMatch(
+            word = word,
+            sourceOffset = leadingTrimmedCount,
+            sourceLength = mapNormalizedPrefixLengthToSourceLength(sanitized, word, Script.JAPANESE),
+            isDictionaryMatch = isDictionaryMatch,
+        )
+    }
+
+    private fun normalizeForSearch(input: String, script: Script): NormalizedText {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) {
+            return NormalizedText("", IntArray(0), IntArray(0))
+        }
+
+        val converted = if (script == Script.JAPANESE) convertToKana(trimmed) else trimmed
+        val normalizedText = StringBuilder(converted.length)
+        val sourceOffsets = mutableListOf<Int>()
+        val sourceLengths = mutableListOf<Int>()
+
+        var index = 0
+        while (index < converted.length) {
+            val char = converted[index]
+            if (char.isWhitespace()) {
+                val start = index
+                while (index < converted.length && converted[index].isWhitespace()) {
+                    index++
+                }
+                val end = index
+                val previous = normalizedText.lastOrNull()
+                val next = converted.getOrNull(index)
+                val shouldDropWhitespace = when (script) {
+                    Script.JAPANESE, Script.CHINESE ->
+                        previous != null &&
+                            next != null &&
+                            !previous.isWhitespace() &&
+                            !next.isWhitespace() &&
+                            isCjkScriptChar(previous, script) &&
+                            isCjkScriptChar(next, script)
+                    else -> false
+                }
+                if (!shouldDropWhitespace) {
+                    normalizedText.append(' ')
+                    sourceOffsets += start
+                    sourceLengths += end - start
+                }
+                continue
+            }
+
+            normalizedText.append(char)
+            sourceOffsets += index
+            sourceLengths += 1
+            index++
+        }
+
+        val normalized = normalizedText.toString().trim()
+        if (normalized.isEmpty()) {
+            return NormalizedText("", IntArray(0), IntArray(0))
+        }
+
+        val leadingTrim = normalizedText.indexOfFirst { !it.isWhitespace() }
+        val trailingTrimExclusive = normalizedText.indexOfLast { !it.isWhitespace() } + 1
+
+        return NormalizedText(
+            text = normalized,
+            sourceOffsets = sourceOffsets.subList(leadingTrim, trailingTrimExclusive).toIntArray(),
+            sourceLengths = sourceLengths.subList(leadingTrim, trailingTrimExclusive).toIntArray(),
+        )
+    }
+
+    private fun isCjkScriptChar(char: Char, script: Script): Boolean {
+        return when (script) {
+            Script.JAPANESE ->
+                char in '\u3041'..'\u309F' ||
+                    char in '\u30A0'..'\u30FF' ||
+                    char in '\u4E00'..'\u9FFF' ||
+                    char in '\u3400'..'\u4DBF'
+            Script.CHINESE ->
+                char in '\u4E00'..'\u9FFF' || char in '\u3400'..'\u4DBF'
+            Script.KOREAN ->
+                char in '\uAC00'..'\uD7A3' || char in '\u1100'..'\u11FF'
+            Script.ENGLISH -> false
+        }
+    }
+
+    private fun mapNormalizedPrefixLengthToSourceLength(
+        source: String,
+        normalizedPrefix: String,
+        script: Script,
+    ): Int {
         if (normalizedPrefix.isEmpty()) return 0
 
         for (index in 1..source.length) {
-            val convertedPrefix = convertToKana(source.take(index))
-            if (convertedPrefix.length >= normalizedPrefix.length &&
-                convertedPrefix.startsWith(normalizedPrefix)
+            val normalizedSourcePrefix = normalizeForSearch(source.take(index), script).text
+            if (normalizedSourcePrefix.length >= normalizedPrefix.length &&
+                normalizedSourcePrefix.startsWith(normalizedPrefix)
             ) {
                 return index
             }
         }
 
-        return minOf(source.length, normalizedPrefix.length)
+        return source.length
     }
 }
 

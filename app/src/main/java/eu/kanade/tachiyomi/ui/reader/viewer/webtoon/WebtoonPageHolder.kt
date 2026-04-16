@@ -117,6 +117,7 @@ class WebtoonPageHolder(
         this.page = page
         loadJob?.cancel()
         frame.setOcrPageIdentity(page.chapter.chapter.id, page.index)
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
         loadJob = scope.launch { loadPageAndProcessStatus() }
         refreshLayoutParams()
@@ -144,6 +145,7 @@ class WebtoonPageHolder(
         removeErrorLayout()
         frame.recycle()
         frame.clearOcrPageIdentity()
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
         progressIndicator.setProgress(0)
         progressContainer.isVisible = true
@@ -187,6 +189,7 @@ class WebtoonPageHolder(
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
     }
 
@@ -197,6 +200,7 @@ class WebtoonPageHolder(
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
     }
 
@@ -207,6 +211,7 @@ class WebtoonPageHolder(
         progressContainer.isVisible = true
         progressIndicator.show()
         removeErrorLayout()
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
     }
 
@@ -219,12 +224,18 @@ class WebtoonPageHolder(
         val streamFn = page?.stream ?: return
 
         try {
-            val (source, isAnimated) = withIOContext {
+            val (source, isAnimated, cropRect) = withIOContext {
                 val source = streamFn().use { process(Buffer().readFrom(it)) }
                 val isAnimated = ImageUtil.isAnimatedAndSupported(source)
-                Pair(source, isAnimated)
+                val cropRect = if (!isAnimated && viewer.config.imageCropBorders) {
+                    ImageUtil.detectBorderCrop(source)
+                } else {
+                    null
+                }
+                Triple(source, isAnimated, cropRect)
             }
             withUIContext {
+                frame.setFileCropRect(cropRect)
                 frame.setImage(
                     source,
                     isAnimated,
@@ -277,6 +288,7 @@ class WebtoonPageHolder(
     private fun setError(error: Throwable?) {
         progressContainer.isVisible = false
         initErrorLayout(error)
+        frame.setFileCropRect(null)
         frame.clearCachedOcrResult()
     }
 

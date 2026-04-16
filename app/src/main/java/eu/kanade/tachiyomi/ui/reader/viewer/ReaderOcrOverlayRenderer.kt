@@ -180,9 +180,10 @@ internal class ReaderOcrOverlayRenderer(
 
         overlayLayout.glyphs.forEach { glyph ->
             textPaint.color = if (glyph.isHighlighted) highlightTextColor else Color.WHITE
-            val textWidth = measureText(glyph.char)
+            val drawChar = verticalEllipsis(glyph.char)
+            val textWidth = measureText(drawChar)
             val textX = glyph.rect.left + ((glyph.rect.width() - textWidth) / 2f)
-            canvas.drawText(glyph.char, textX, glyph.baselineY, textPaint)
+            canvas.drawText(drawChar, textX, glyph.baselineY, textPaint)
         }
     }
 
@@ -359,7 +360,7 @@ internal class ReaderOcrOverlayRenderer(
         for ((lineIndex, line) in lines.withIndex()) {
             val glyphs = mutableListOf<VerticalGlyph>()
             line.forEachIndexed { charIndex, char ->
-                val glyphWidth = maxOf(measureText(char.toString()), textSizePx * 0.85f)
+                val glyphWidth = maxOf(measureText(verticalEllipsis(char.toString())), textSizePx * 0.85f)
                 val isHighlighted = highlightRange?.let { displayOffset in it.first until it.second } == true
                 glyphs += VerticalGlyph(
                     char = char.toString(),
@@ -427,6 +428,13 @@ internal class ReaderOcrOverlayRenderer(
 
     private fun measureText(text: String, start: Int, end: Int): Float {
         return textPaint.measureText(text, start, end)
+    }
+
+    private fun verticalEllipsis(text: String): String {
+        return when (text) {
+            "…" -> "︙"
+            else -> text
+        }
     }
 
     private fun hasCjk(text: String): Boolean = text.any { c ->

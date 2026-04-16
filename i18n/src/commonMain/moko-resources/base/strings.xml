@@ -477,6 +477,7 @@
     <string name="scale_type_original_size">Original size</string>
     <string name="scale_type_smart_fit">Smart fit</string>
     <string name="pref_navigate_pan">Pan wide images</string>
+    <string name="pref_panel_navigation">Panel-by-panel navigation</string>
     <string name="pref_landscape_zoom">Automatically zoom into wide images</string>
     <string name="pref_zoom_start">Zoom start position</string>
     <string name="zoom_start_automatic">Automatic</string>
@@ -1168,9 +1169,11 @@
     <string name="anki_deck_name">Deck name</string>
     <string name="anki_note_type_selection">Note Type Selection</string>
     <string name="anki_note_type_name">Note type name</string>
-    <string name="anki_audio_settings">Audio</string>
+    <string name="anki_media_settings">Media</string>
     <string name="anki_dictionary_audio_prefill">Prefill dictionary audio</string>
-    <string name="anki_dictionary_audio_prefill_summary">Attach fetched dictionary audio to Anki exports when available.</string>
+    <string name="anki_dictionary_audio_prefill_summary">Attach fetched dictionary audio to Anki exports when available</string>
+    <string name="anki_cropped_image_export">Crop exported image</string>
+    <string name="anki_cropped_image_export_summary">Select a page region before exporting a card</string>
     <string name="anki_field_mappings">Field Mappings</string>
     <string name="anki_field_empty">Empty</string>
     <string name="anki_field_audio">Audio</string>
@@ -1205,6 +1208,7 @@
     <string name="action_copy">Copy</string>
     <string name="action_play_audio">Play audio</string>
     <string name="ocr_select_region">Drag to select text region</string>
+    <string name="anki_select_image_region">Drag to select Anki image</string>
     <string name="ocr_processing">Processing OCR…</string>
     <string name="ocr_queue_header">Text recognition queue</string>
     <string name="ocr_queue_empty">No OCR scans</string>

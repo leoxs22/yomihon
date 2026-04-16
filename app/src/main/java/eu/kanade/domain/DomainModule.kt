@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.data.ocr.OcrQueueActions
 import eu.kanade.tachiyomi.data.ocr.OcrScanManager
 import eu.kanade.tachiyomi.data.ocr.OcrScanNotifier
 import eu.kanade.tachiyomi.data.ocr.OcrScanStore
+import eu.kanade.tachiyomi.ui.reader.ReaderSelectionCropper
 import mihon.data.ankidroid.AnkiDroidRepositoryImpl
 import mihon.data.dictionary.DictionaryParserImpl
 import mihon.data.dictionary.DictionaryRepositoryImpl
@@ -43,6 +44,7 @@ import mihon.data.dictionary.DictionarySearchGatewayImpl
 import mihon.data.dictionary.HoshiDictionaryStore
 import mihon.data.dictionary.LegacyDictionaryArchiveBuilder
 import mihon.data.ocr.OcrRepositoryImpl
+import mihon.data.panel.PanelDetectionRepositoryImpl
 import mihon.data.repository.ExtensionRepoRepositoryImpl
 import mihon.domain.ankidroid.interactor.AddDictionaryCard
 import mihon.domain.ankidroid.interactor.FindExistingAnkiNotes
@@ -78,6 +80,8 @@ import mihon.domain.ocr.interactor.OcrProcessor
 import mihon.domain.ocr.interactor.ScanPageOcr
 import mihon.domain.ocr.interactor.WithOcrScanSession
 import mihon.domain.ocr.repository.OcrRepository
+import mihon.domain.panel.interactor.DetectPanels
+import mihon.domain.panel.repository.PanelDetectionRepository
 import mihon.domain.upcoming.interactor.GetUpcomingManga
 import tachiyomi.data.category.CategoryRepositoryImpl
 import tachiyomi.data.chapter.ChapterRepositoryImpl
@@ -283,14 +287,14 @@ class DomainModule : InjektModule {
         addSingletonFactory<OcrRepository> {
             OcrRepositoryImpl(
                 context = get<Application>(),
-                downloadPreferences = get(),
             )
         }
         addSingletonFactory { OcrScanStore(get<Application>(), get()) }
         addSingletonFactory<OcrPageSourceGateway> { OcrPageSourceGatewayImpl(get<Application>(), get(), get()) }
         addSingletonFactory { OcrPageSourceResolver(get(), get(), get()) }
+        addSingletonFactory { ReaderSelectionCropper(get()) }
         addSingletonFactory { OcrScanNotifier(get<Application>()) }
-        addSingletonFactory { OcrChapterScanner(get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory { OcrChapterScanner(get<Application>(), get(), get(), get(), get(), get(), get(), get()) }
         addSingletonFactory { OcrScanManager(get<Application>(), get(), get(), get()) }
         addFactory { OcrQueueActions(get(), get()) }
         addFactory { OcrProcessor(get()) }
@@ -301,5 +305,12 @@ class DomainModule : InjektModule {
         addFactory { ClearCachedChapterOcr(get()) }
         addFactory { ClearOcrCache(get()) }
         addFactory { GetOcrCacheSize(get()) }
+
+        addSingletonFactory<PanelDetectionRepository> {
+            PanelDetectionRepositoryImpl(
+                context = get<Application>(),
+            )
+        }
+        addFactory { DetectPanels(get()) }
     }
 }

@@ -60,3 +60,36 @@ fun flattenOcrTextForQuery(text: String): String {
         .replace(Regex("\\s+"), " ")
         .trim()
 }
+
+fun normalizeOcrTextForDisplay(text: String): String {
+    if (text.isEmpty()) return text
+
+    return text
+        .replace(Regex("[ ]*[.．・･…]{2,}")) { match ->
+            dotRunToEllipses(match.value.trimStart(' '))
+        }
+        .replace(Regex("[!！]{2,}"), "‼")
+        .replace(Regex("[?？]{2,}"), "⁇")
+        .replace(Regex("[!！][?？]+"), "⁉")
+        .replace(Regex("[?？][!！]+"), "⁈")
+}
+
+private fun dotRunToEllipses(dotRun: String): String {
+    val dotCount = dotRun.sumOf {
+        when (it) {
+            '…' -> 3
+            '.', '．', '・', '･' -> 1
+            else -> 0
+        }
+    }
+    val ellipsisCount = dotCount / 3
+    val remainder = dotCount % 3
+
+    return buildString(ellipsisCount + if (remainder >= 2) 1 else remainder) {
+        repeat(ellipsisCount) { append('…') }
+        when (remainder) {
+            1 -> append('.')
+            2 -> append('…')
+        }
+    }
+}

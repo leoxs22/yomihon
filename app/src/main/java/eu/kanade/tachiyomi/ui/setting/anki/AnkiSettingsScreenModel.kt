@@ -211,6 +211,10 @@ class AnkiSettingsScreenModel(
         return ankiDroidPreferences.dictionaryAudioPrefill()
     }
 
+    fun croppedImageExportPreference(): Preference<Boolean> {
+        return ankiDroidPreferences.croppedImageExport()
+    }
+
     fun clearError() {
         mutableState.update { it.copy(error = null) }
     }

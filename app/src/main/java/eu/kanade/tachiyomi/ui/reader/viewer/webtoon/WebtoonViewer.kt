@@ -20,7 +20,10 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderActiveOcrOverlay
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderActiveOcrTapResult
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderOcrPageIdentity
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderSelectionCapture
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderSelectionRegion
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
 import kotlinx.coroutines.MainScope
@@ -252,6 +255,35 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                 }
             }
         return matched
+    }
+
+    override fun resolveSelectionCaptures(region: ReaderSelectionRegion): List<ReaderSelectionCapture> {
+        return recycler.children
+            .filterIsInstance(ReaderPageImageView::class.java)
+            .mapNotNull { child ->
+                val childRect = android.graphics.Rect()
+                if (!child.getGlobalVisibleRect(childRect)) return@mapNotNull null
+
+                val intersection = android.graphics.RectF(region.screenRect)
+                if (!intersection.intersect(android.graphics.RectF(childRect))) return@mapNotNull null
+
+                val page = adapter.items
+                    .getOrNull(recycler.getChildAdapterPosition(child)) as? ReaderPage
+                    ?: return@mapNotNull null
+                val chapterId = page.chapter.chapter.id ?: return@mapNotNull null
+                val pageIdentity = ReaderOcrPageIdentity(chapterId, page.index)
+                if (!child.matchesOcrPage(pageIdentity)) return@mapNotNull null
+
+                val sourceRect = child.sourceRectForScreenRect(intersection) ?: return@mapNotNull null
+                ReaderSelectionCapture(
+                    page = page,
+                    sourceRect = sourceRect,
+                    screenRect = intersection,
+                    bitmapSource = child,
+                )
+            }
+            .toList()
+            .sortedWith(compareBy<ReaderSelectionCapture> { it.screenRect.top }.thenBy { it.screenRect.left })
     }
 
     /**

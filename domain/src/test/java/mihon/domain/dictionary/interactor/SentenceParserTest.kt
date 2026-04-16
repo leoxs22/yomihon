@@ -115,6 +115,19 @@ class SentenceParserTest {
     }
 
     @Test
+    fun `findFirstWordMatch ignores OCR spaces inside Japanese text and preserves source range`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("私は", testDictionaryIds) } returns listOf(
+            mockTerm("私は", "わたしは", "n"),
+        )
+
+        val match = searchDictionaryTerms.findFirstWordMatch("私 は 学生", testDictionaryIds)
+
+        match.word shouldBe "私は"
+        match.sourceOffset shouldBe 0
+        match.sourceLength shouldBe 3
+    }
+
+    @Test
     fun `gets the longest word match`() = runTest {
         // Setup: both "食べ" "食べる" and "食べ物" exist, but "食べ物" is longer
         coEvery { dictionaryRepository.searchTerms("食べ物", testDictionaryIds) } returns listOf(
@@ -264,6 +277,19 @@ class SentenceParserTest {
     }
 
     @Test
+    fun `segments Chinese text across OCR spaces`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("你好", testDictionaryIds) } returns listOf(
+            mockTerm("你好"),
+        )
+
+        val match = searchDictionaryTerms.findFirstWordMatch("你 好 世界", testDictionaryIds)
+
+        match.word shouldBe "你好"
+        match.sourceOffset shouldBe 0
+        match.sourceLength shouldBe 3
+    }
+
+    @Test
     fun `segments Korean text by longest character match`() = runTest {
         coEvery { dictionaryRepository.searchTerms("안녕", testDictionaryIds) } returns listOf(
             mockTerm("안녕"),
@@ -272,6 +298,17 @@ class SentenceParserTest {
         val word = searchDictionaryTerms.findFirstWord("안녕하세요", testDictionaryIds)
 
         word shouldBe "안녕"
+    }
+
+    @Test
+    fun `preserves Korean spaces for direct lookup`() = runTest {
+        coEvery { dictionaryRepository.searchTerms("안녕 하세요", testDictionaryIds) } returns listOf(
+            mockTerm("안녕 하세요"),
+        )
+
+        val word = searchDictionaryTerms.findFirstWord("안녕 하세요 반가워요", testDictionaryIds)
+
+        word shouldBe "안녕 하세요"
     }
 
     @Test

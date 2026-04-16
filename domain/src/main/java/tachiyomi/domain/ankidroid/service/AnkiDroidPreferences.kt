@@ -11,6 +11,7 @@ class AnkiDroidPreferences(
     fun deckName() = preferenceStore.getString("ankidroid_deck_name", "Yomihon")
     fun modelName() = preferenceStore.getString("ankidroid_model_name", "Yomihon Card")
     fun dictionaryAudioPrefill() = preferenceStore.getBoolean("pref_anki_dictionary_audio_prefill", true)
+    fun croppedImageExport() = preferenceStore.getBoolean("pref_cropped_image_export", false)
 
     fun fieldMappings(): Preference<Map<String, String>> = preferenceStore.getObjectFromString(
         key = "ankidroid_field_mappings",

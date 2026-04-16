@@ -3,9 +3,6 @@ package mihon.data.ocr
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import android.os.Build
 import com.google.ai.edge.litert.Environment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +23,6 @@ import mihon.domain.ocr.repository.OcrRepository
 import tachiyomi.core.common.preference.AndroidPreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.domain.download.service.DownloadPreferences
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -36,15 +32,19 @@ import java.net.UnknownHostException
  */
 class OcrRepositoryImpl(
     private val context: Context,
-    downloadPreferences: DownloadPreferences,
 ) : OcrRepository {
     private val preferenceStore = AndroidPreferenceStore(context)
     private val ocrModelPref = preferenceStore.getEnum("pref_ocr_model", OcrModel.LEGACY)
 
-    // Used to check setting for page scans, since those are similar in bandwidth to downloading
-    private val wifiOnlyPref = downloadPreferences.downloadOnlyOverWifi()
+    private val environmentResult by lazy {
+        runCatching { Environment.create() }
+            .onFailure { error ->
+                logcat(LogPriority.WARN, error) {
+                    "LiteRT environment unavailable; local OCR engines will fall back"
+                }
+            }
+    }
 
-    private val environment by lazy { Environment.create() }
     private val textPostprocessor by lazy { TextPostprocessor() }
     private val cacheStore by lazy { OcrCacheStore(context) }
 
@@ -83,28 +83,6 @@ class OcrRepositoryImpl(
         }
     }
 
-    private fun requiresWifiForScan(): Boolean {
-        return wifiOnlyPref.get()
-    }
-
-    private fun checkWifiForScan() {
-        if (requiresWifiForScan() && !isConnectedToWifi()) {
-            throw OcrException.ConnectionError()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun isConnectedToWifi(): Boolean {
-        val connectivityManager = context.getSystemService(ConnectivityManager::class.java) ?: return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val activeNetwork = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-        } else {
-            connectivityManager.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
-        }
-    }
-
     private fun isConnectivityFailure(error: Throwable): Boolean {
         var current: Throwable? = error
         while (current != null) {
@@ -129,26 +107,51 @@ class OcrRepositoryImpl(
         }
     }
 
-    private suspend fun recognizeWithEngine(type: EngineType, image: Bitmap): String {
-        return engineLocks.withTextEngineLock(type) {
-            val engine = when (type) {
-                EngineType.FAST -> {
-                    fastEngine ?: FastOcrEngine(context, environment, textPostprocessor).also {
-                        fastEngine = it
-                    }
-                }
-                EngineType.LEGACY -> {
-                    legacyEngine ?: LegacyOcrEngine(context, environment, textPostprocessor).also {
-                        legacyEngine = it
-                    }
-                }
-                EngineType.GLENS -> {
-                    glensEngine ?: GlensOcrEngine().also {
-                        glensEngine = it
-                    }
+    private fun requireEnvironment(): Environment {
+        return environmentResult.getOrElse { cause ->
+            throw OcrException.InitializationError(cause)
+        }
+    }
+
+    private fun localOcrAvailable(): Boolean {
+        return environmentResult.isSuccess
+    }
+
+    private fun engineFor(type: EngineType): OcrEngine {
+        return when (type) {
+            EngineType.FAST -> {
+                fastEngine ?: FastOcrEngine(context, requireEnvironment(), textPostprocessor).also {
+                    fastEngine = it
                 }
             }
-            engine.recognizeText(image)
+            EngineType.LEGACY -> {
+                legacyEngine ?: LegacyOcrEngine(context, requireEnvironment(), textPostprocessor).also {
+                    legacyEngine = it
+                }
+            }
+            EngineType.GLENS -> {
+                glensEngine ?: GlensOcrEngine().also {
+                    glensEngine = it
+                }
+            }
+        }
+    }
+
+    private fun detectionEngine(): DetOcrEngine {
+        return detEngine ?: (
+            if (localOcrAvailable()) {
+                UnavailableDetOcrEngine() // TODO: replace with real DetOcrEngine with a local model
+            } else {
+                UnavailableDetOcrEngine()
+            }
+            ).also {
+            detEngine = it
+        }
+    }
+
+    private suspend fun recognizeWithEngine(type: EngineType, image: Bitmap): String {
+        return engineLocks.withTextEngineLock(type) {
+            engineFor(type).recognizeText(image)
         }
     }
 
@@ -181,8 +184,7 @@ class OcrRepositoryImpl(
         return withActiveOperation {
             submitTask(PrioritizedTaskQueue.Priority.HIGH) {
                 image.useBitmap { bitmap ->
-                    val primary = selectedEngineType()
-                    recognizeWithFallback(primary, bitmap)
+                    recognizeWithFallback(selectedEngineType(), bitmap)
                 }
             }
         }
@@ -301,7 +303,6 @@ class OcrRepositoryImpl(
         image: Bitmap,
         modelKey: OcrModel,
     ): OcrPageResult {
-        checkWifiForScan()
         val result = try {
             submitTask(PrioritizedTaskQueue.Priority.NORMAL) {
                 engineLocks.withTextEngineLock(EngineType.GLENS) {
@@ -337,9 +338,7 @@ class OcrRepositoryImpl(
     ): OcrPageResult {
         val boxes = submitTask(PrioritizedTaskQueue.Priority.NORMAL) {
             engineLocks.withDetectionLock {
-                val engine = detEngine ?: UnavailableDetOcrEngine().also {
-                    detEngine = it
-                }
+                val engine = detectionEngine()
                 engine.detectTextRegions(image)
             }
         }

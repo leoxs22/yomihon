@@ -313,6 +313,45 @@ class SearchDictionaryTermsHybridTest {
     }
 
     @Test
+    fun `japanese search removes OCR spaces before lookup`() = runTest {
+        val japaneseDictionary = Dictionary(
+            id = 1L,
+            title = "Japanese",
+            revision = "1",
+            version = 3,
+            sourceLanguage = "ja",
+            backend = DictionaryBackend.HOSHI,
+            storageReady = true,
+        )
+        val term = DictionaryTerm(
+            dictionaryId = 1L,
+            expression = "私は",
+            reading = "わたしは",
+            definitionTags = null,
+            rules = null,
+            score = 0,
+            glossary = emptyList(),
+            termTags = null,
+        )
+
+        coEvery { dictionaryRepository.getAllDictionaries() } returns listOf(japaneseDictionary)
+        coEvery { dictionarySearchGateway.lookup("私は", listOf(1L), any()) } returns listOf(
+            DictionaryLookupMatch(
+                matched = "私は",
+                deinflected = "私は",
+                process = listOf("dictionary"),
+                term = term,
+                termMeta = emptyList(),
+            ),
+        )
+
+        val results = searchDictionaryTerms.search("私 は", listOf(1L))
+
+        results.map { it.expression } shouldBe listOf("私は")
+        coVerify(exactly = 1) { dictionarySearchGateway.lookup("私は", listOf(1L), any()) }
+    }
+
+    @Test
     fun `japanese lookup ranks exact expression then reading then deinflected matches`() = runTest {
         val japaneseDictionary = Dictionary(
             id = 1L,

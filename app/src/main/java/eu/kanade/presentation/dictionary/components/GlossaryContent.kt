@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.turtlekazu.furiganable.compose.m3.TextWithReading
 import mihon.domain.dictionary.css.BoxStyle
 import mihon.domain.dictionary.css.ParsedCss
 import mihon.domain.dictionary.css.getCssStyles
@@ -89,7 +90,7 @@ private fun FormsRow(forms: List<String>, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
         )
-        DictTextWithReading(
+        TextWithReading(
             formattedText = forms.joinToString(", "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -128,7 +129,7 @@ private fun DefinitionRow(text: String, indentLevel: Int) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(end = 6.dp),
         )
-        DictTextWithReading(
+        TextWithReading(
             formattedText = text,
             style = MaterialTheme.typography.bodyMedium,
             furiganaFontSize = MaterialTheme.typography.bodyMedium.fontSize * 0.60f,
@@ -477,7 +478,7 @@ private fun StructuredListItem(
         }
 
         if (!inlineText.isNullOrBlank() && !containsLink) {
-            DictTextWithReading(
+            TextWithReading(
                 formattedText = inlineText,
                 style = textStyle,
                 furiganaFontSize = textStyle.fontSize * 0.60f,
@@ -519,7 +520,7 @@ private fun RubyNode(
         baseText
     }
 
-    DictTextWithReading(
+    TextWithReading(
         formattedText = furiganaText,
         style = textStyle,
         furiganaFontSize = textStyle.fontSize * 0.60f,
@@ -582,7 +583,7 @@ private fun LinkNode(
     val clickTarget = queryParam ?: href ?: linkText
 
     val linkColor = MaterialTheme.colorScheme.primary
-    DictTextWithReading(
+    TextWithReading(
         formattedText = displayText,
         style = textStyle,
         color = linkColor,
@@ -649,7 +650,7 @@ private fun DetailsNode(
                     combinedStyleMap,
                 )
                 val summaryText = summaryNode.children.collectText()
-                DictTextWithReading(
+                TextWithReading(
                     formattedText = summaryText,
                     style = summaryStyle,
                     furiganaFontSize = summaryStyle.fontSize * 0.60f,
@@ -698,7 +699,7 @@ private fun SummaryNode(
     )
 
     val summary = node.children.collectText()
-    DictTextWithReading(
+    TextWithReading(
         formattedText = summary,
         style = textStyle,
         furiganaFontSize = textStyle.fontSize * 0.60f,
@@ -789,7 +790,7 @@ private fun SpanNode(
 
     if (annotatedResult.linkRanges.isEmpty()) {
         // No links - simple text rendering
-        DictTextWithReading(
+        TextWithReading(
             formattedText = annotatedResult.text,
             style = textStyle,
             furiganaFontSize = textStyle.fontSize * 0.60f,
@@ -867,7 +868,7 @@ internal fun InlineStructuredNode(
                 else -> {
                     val text = listOf(node).collectText()
                     if (text.isNotBlank()) {
-                        DictTextWithReading(
+                        TextWithReading(
                             formattedText = text,
                             style = styledTextStyle,
                             furiganaFontSize = styledTextStyle.fontSize * 0.60f,

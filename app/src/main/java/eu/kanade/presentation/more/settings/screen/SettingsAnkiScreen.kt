@@ -98,12 +98,17 @@ object SettingsAnkiScreen : SearchableSettings {
             preferences.add(getDeckNoteConfig(state, screenModel))
             preferences.add(
                 Preference.PreferenceGroup(
-                    title = stringResource(MR.strings.anki_audio_settings),
+                    title = stringResource(MR.strings.anki_media_settings),
                     preferenceItems = listOf(
                         Preference.PreferenceItem.SwitchPreference(
                             preference = remember(screenModel) { screenModel.audioPrefillPreference() },
                             title = stringResource(MR.strings.anki_dictionary_audio_prefill),
                             subtitle = stringResource(MR.strings.anki_dictionary_audio_prefill_summary),
+                        ),
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = remember(screenModel) { screenModel.croppedImageExportPreference() },
+                            title = stringResource(MR.strings.anki_cropped_image_export),
+                            subtitle = stringResource(MR.strings.anki_cropped_image_export_summary),
                         ),
                     ).toImmutableList(),
                 ),

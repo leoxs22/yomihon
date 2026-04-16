@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.ocr
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Rect
 import com.hippo.unifile.UniFile
 import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.tachiyomi.data.download.DownloadManager
@@ -15,6 +17,7 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.source.local.LocalSource
 import tachiyomi.source.local.io.Format
+import java.io.InputStream
 
 internal class OcrPageSourceGatewayImpl(
     private val context: Context,
@@ -33,14 +36,10 @@ internal class OcrPageSourceGatewayImpl(
         }
 
         val pages = downloadManager.buildPageList(source, manga, chapter).map { page ->
-            OcrPageInput(
+            buildPageInput(
                 pageIndex = page.index,
-                openBitmap = {
-                    withIOContext {
-                        page.uri?.let { uri ->
-                            context.contentResolver.openInputStream(uri)?.use(::decodeBitmap)
-                        }
-                    }
+                openStream = {
+                    page.uri?.let(context.contentResolver::openInputStream)
                 },
             )
         }
@@ -66,13 +65,9 @@ internal class OcrPageSourceGatewayImpl(
                 file1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(file2.name.orEmpty())
             }
             ?.mapIndexed { index, imageFile ->
-                OcrPageInput(
+                buildPageInput(
                     pageIndex = index,
-                    openBitmap = {
-                        withIOContext {
-                            imageFile.openInputStream()?.use(::decodeBitmap)
-                        }
-                    },
+                    openStream = imageFile::openInputStream,
                 )
             }
             .orEmpty()
@@ -96,13 +91,11 @@ internal class OcrPageSourceGatewayImpl(
             }
 
         val pages = entryNames.mapIndexed { index, entryName ->
-            OcrPageInput(
+            buildPageInput(
                 pageIndex = index,
-                openBitmap = {
-                    withIOContext {
-                        reader.getInputStream(entryName)?.use(::decodeArchiveBitmap)
-                    }
-                },
+                openStream = { reader.getInputStream(entryName) },
+                decodeBitmap = ::decodeArchiveBitmap,
+                decodeBitmapRegion = ::decodeArchiveBitmapRegion,
             )
         }
 
@@ -117,19 +110,36 @@ internal class OcrPageSourceGatewayImpl(
         val imagePaths = withIOContext { reader.getImagesFromPages() }
 
         val pages = imagePaths.mapIndexed { index, path ->
-            OcrPageInput(
+            buildPageInput(
                 pageIndex = index,
-                openBitmap = {
-                    withIOContext {
-                        reader.getInputStream(path)?.use(::decodeBitmap)
-                    }
-                },
+                openStream = { reader.getInputStream(path) },
             )
         }
 
         return ResolvedOcrPages(
             pages = pages,
             closeBlock = reader::close,
+        )
+    }
+
+    private fun buildPageInput(
+        pageIndex: Int,
+        openStream: suspend () -> InputStream?,
+        decodeBitmap: (InputStream) -> Bitmap? = ::decodeBitmap,
+        decodeBitmapRegion: (InputStream, Rect) -> Bitmap? = ::decodeBitmapRegion,
+    ): OcrPageInput {
+        return OcrPageInput(
+            pageIndex = pageIndex,
+            openBitmap = {
+                withIOContext {
+                    openStream()?.use(decodeBitmap)
+                }
+            },
+            openBitmapRegion = { sourceRect ->
+                withIOContext {
+                    openStream()?.use { stream -> decodeBitmapRegion(stream, sourceRect) }
+                }
+            },
         )
     }
 }
